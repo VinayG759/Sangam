@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import mimetypes
 import os
@@ -34,10 +35,19 @@ import sys
 import time
 from pathlib import Path
 
+# Windows consoles default to cp1252, which cannot print Kannada, Hindi or any
+# other script this system handles. Force UTF-8 so transcripts render.
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 REPO = Path(__file__).resolve().parents[2]
 TAXONOMY = REPO / "packs" / "india" / "need_taxonomy.yaml"
 
-MODEL = "gemini-3.6-flash"
+# flash-lite is primary: on the free tier gemini-3.6-flash returns 503 under
+# load, while flash-lite answers in ~1s. For a fixed-schema extraction the
+# lighter model is the right call anyway.
+MODEL = "gemini-3.5-flash-lite"
 
 # Formats Telegram and WhatsApp actually send, plus common recorder output.
 MIME_BY_SUFFIX = {
@@ -55,8 +65,11 @@ structured record. Rules:
 - Detect the language. Transcribe exactly what was said, in its own script.
 - Translate to English faithfully. Do not embellish or add detail.
 - need_type MUST be one of the allowed values. If none fit, use "other".
-- location_text: the place the citizen named, exactly as they said it. Empty
-  string if they named no place. NEVER guess a location.
+- location_text: the place the citizen named, exactly as they said it, in
+  their own script. Empty string if they named no place. NEVER guess.
+- location_text_latin: the same place names romanised into Latin script, using
+  the spelling an Indian government dataset would use. "" if no place named.
+  This is what the gazetteer matches on, so it matters as much as the original.
 - affected_estimate: only if they stated a number. Use 0 if they did not.
 - urgency 1-5, judged on the severity they described, not on your own view.
 - contains_pii: true if a name, phone number or ID number was spoken.
@@ -89,16 +102,18 @@ def build_schema(need_types: list[str]) -> dict:
             "need_type": {"type": "string", "enum": need_types},
             "urgency": {"type": "integer", "minimum": 1, "maximum": 5},
             "location_text": {"type": "string"},
+            "location_text_latin": {"type": "string",
+                                    "description": "romanised place name for gazetteer matching"},
             "affected_estimate": {"type": "integer"},
             "contains_pii": {"type": "boolean"},
             "is_actionable": {"type": "boolean"},
         },
         "required": ["language", "transcript", "translation_en", "need_type",
-                     "urgency", "location_text", "affected_estimate",
-                     "contains_pii", "is_actionable"],
+                     "urgency", "location_text", "location_text_latin",
+                     "affected_estimate", "contains_pii", "is_actionable"],
         "propertyOrdering": ["language", "transcript", "translation_en", "need_type",
-                             "urgency", "location_text", "affected_estimate",
-                             "contains_pii", "is_actionable"],
+                             "urgency", "location_text", "location_text_latin",
+                             "affected_estimate", "contains_pii", "is_actionable"],
     }
 
 
@@ -187,6 +202,8 @@ def main() -> None:
          record.get("need_type") in need_types),
         ("location_text not fabricated (empty or a real string)",
          isinstance(record.get("location_text"), str)),
+        (f"romanised location produced for gazetteer ({record.get('location_text_latin')!r})",
+         isinstance(record.get("location_text_latin"), str)),
         ("urgency in 1-5", 1 <= int(record.get("urgency", 0)) <= 5),
         (f"intake latency under 5s budget ({elapsed:.1f}s)", elapsed < 5.0),
     ]:
