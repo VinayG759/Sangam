@@ -1,0 +1,67 @@
+# The six need types Sangam recognises in India.
+#
+# Gemini is constrained to pick a `key` from this list — it cannot invent a
+# category the country does not recognise. Adding a seventh need type here is
+# the only change required to support one.
+#
+# `label_*` entries are what a citizen sees in a reply, in their own language.
+
+needs:
+  - key: water
+    label_en: Water supply
+    label_hi: जल आपूर्ति
+    label_kn: ನೀರು ಸರಬರಾಜು
+    examples_en:
+      - no water in the village
+      - borewell has gone dry
+      - handpump broken
+      - tap water not coming for days
+
+  - key: road
+    label_en: Roads and connectivity
+    label_hi: सड़क
+    label_kn: ರಸ್ತೆ
+    examples_en:
+      - road full of potholes
+      - village not connected in monsoon
+      - bridge washed away
+
+  - key: electricity
+    label_en: Electricity
+    label_hi: बिजली
+    label_kn: ವಿದ್ಯುತ್
+    examples_en:
+      - no power for hours every day
+      - transformer burnt out
+      - street lights not working
+
+  - key: health
+    label_en: Health facilities
+    label_hi: स्वास्थ्य सुविधा
+    label_kn: ಆರೋಗ್ಯ ಸೌಲಭ್ಯ
+    examples_en:
+      - no doctor at the primary health centre
+      - nearest hospital is 40 km away
+      - no ambulance service
+
+  - key: education
+    label_en: Schools
+    label_hi: विद्यालय
+    label_kn: ಶಾಲೆ
+    examples_en:
+      - school building has no roof
+      - no teacher posted
+      - no toilet in the school
+
+  - key: sanitation
+    label_en: Sanitation and drainage
+    label_hi: स्वच्छता
+    label_kn: ನೈರ್ಮಲ್ಯ
+    examples_en:
+      - open drain next to houses
+      - garbage not collected
+      - no toilets in the settlement
+
+# Requests Gemini judges to be none of the above.
+# Stored, counted, never clustered into a recommendation.
+fallback_key: other

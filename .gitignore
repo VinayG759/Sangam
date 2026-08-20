@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+web/**/dist/
+web/**/build/
+.next/
+.vite/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Large binary source downloads stay local; cleaned CSVs and raw API
+# snapshots ARE committed, so the pack is reproducible and auditable.
+*.zip
+*.7z
+*.xlsx
+*.shp
+*.dbf
+*.shx
+
+# Media captured during testing
+media/
+*.ogg
+*.opus
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
