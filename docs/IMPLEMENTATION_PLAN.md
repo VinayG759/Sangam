@@ -7,7 +7,7 @@ Sangam joins **unstructured multilingual citizen voice** (complaints, voice note
 ## 1. Architectural Foundations & Load-Bearing Decisions
 
 Sangam is built around 5 non-negotiable architectural principles:
-1. **Tall `indicators` Schema**: Socio-economic indicators are stored tall `(region_id, indicator_code, value, year)` rather than wide columns, enabling dynamic country packs without schema migrations.
+1. **Tall `indicators` Schema with Materialized Views**: Socio-economic indicators are stored tall `(region_id, indicator_code, value, year)` to enable dynamic country packs without schema migrations. For high-performance reads, these are flattened into PostgreSQL Materialized Views.
 2. **Configuration-Driven Weights (`pack.yaml`)**: Priority weights (Equity vs. Reach vs. Demand vs. Expenditure Gap) live in country packs, letting ministries adjust policy trade-offs without modifying code.
 3. **Model-Free Deterministic Scoring**: Gemini is never allowed to rank priorities. Priorities are ranked using transparent, reproducible mathematical formulas; Gemini generates grounded narrative explanations.
 4. **Closed Evidence Bundle Verification**: AI-generated figures and claims are programmatically validated against an immutable JSON evidence bundle. Any discrepancy rejects the summary.
@@ -59,18 +59,18 @@ graph TD
 
 - **Call 1 (Citizen Ingestion & Normalization)**:
   - Model: `gemini-2.5-flash` / `gemini-1.5-pro` (multimodal audio + text)
-  - Input: Raw voice audio (WAV/MP3/M4A) or text in any local language (Hindi, Kannada, Swahili, Portuguese, English, etc.).
+  - Input: Raw voice audio (WAV/MP3/M4A) or text in any local language (Hindi, Kannada, Swahili, Portuguese, English, etc.). *Note: Audio is streamed and strictly governed by retention policies to ensure PII compliance.*
   - Output: Strict JSON schema `{ original_language, english_translation, sector, specific_issue, urgency_score, sentiment, extracted_location_entities, pii_redacted_text }`.
 - **Call 2 (Semantic Join & Entity Resolution)**:
-  - Model: `text-embedding-004` / Gemini semantic similarity
+  - Model: `text-embedding-004` / Gemini semantic similarity combined with BM25 Keyword Search
   - Input: Clustered citizen demand vs. government expenditure line items.
-  - Output: Matched expenditure items with semantic confidence score and allocation status.
+  - Output: Matched expenditure items with semantic confidence score and allocation status. Uses a **Hybrid Search (Vector + Keyword)** approach to bridge bureaucratic terminology and colloquial citizen complaints.
 - **Call 3 (Grounded Policy Brief Synthesis)**:
   - Model: `gemini-2.5-flash` with structured system prompt & temperature `0.1`
   - Input: Verified Evidence Bundle JSON only (no external data).
   - Output: Executive summary, why this is prioritized, fiscal gap analysis, recommended action.
 - **Programmatic Verifier (Non-LLM)**:
-  - Regex parser extracts all numerical values (currencies, counts, percentages) from Call 3 output and asserts that every number exists in the Evidence Bundle within tolerance. If verification fails, the brief is rejected and regenerated.
+  - An intelligent parser (handling formats like "1.5 million" vs "1,500,000" and currency symbols) extracts all numerical values from Call 3 output and asserts that every number exists in the Evidence Bundle within tolerance. If verification fails, the brief is rejected and regenerated.
 
 ---
 
@@ -87,6 +87,7 @@ graph TD
 
 ### Phase 2: Core Data Schema & Country Pack Engine
 - Implement 8 core database tables via SQL migrations and SQLAlchemy models.
+- Create PostgreSQL Materialized Views to flatten the `indicators` tall table for high-performance frontend queries.
 - Build Country Pack Loader (`pack.yaml` parser) handling:
   - Administrative boundary hierarchies.
   - Localization dictionaries and language codes.
