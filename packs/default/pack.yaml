@@ -1,0 +1,25 @@
+country_code: "DEFAULT"
+country_name: "Default Template"
+languages:
+  - code: "en"
+    name: "English"
+    is_default: true
+sectors:
+  - key: "water"
+    name: "Water Supply & Quality"
+  - key: "roads"
+    name: "Roads & Mobility"
+  - key: "sanitation"
+    name: "Sanitation & Waste"
+  - key: "health"
+    name: "Healthcare Facilities"
+  - key: "education"
+    name: "Schools & Education"
+  - key: "electricity"
+    name: "Power & Electricity"
+
+weights:
+  demand_density: 0.40      # density of citizen complaints
+  vulnerability_index: 0.30 # socio-economic indicator
+  expenditure_gap: 0.20     # severity of historical underfunding
+  urgency: 0.10             # average urgency reported by citizens

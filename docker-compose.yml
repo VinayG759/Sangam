@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  db:
+    image: supabase/postgres:15.6.0
+    container_name: sangam-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sangam
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Supabase postgres image automatically configures standard access
+      JWT_SECRET: super-secret-jwt-token-for-local-dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sangam"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sangam-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sangam
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/sangam
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=gemini-2.5-flash
+      - GEMINI_EMBEDDING_MODEL=text-embedding-004
+      - ACTIVE_COUNTRY_PACK=india_karnataka
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
