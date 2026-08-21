@@ -1,0 +1,58 @@
+country_code: IN
+name: India
+currency: INR
+currency_symbol: "₹"
+
+# Languages accepted at intake. Gemini gets these as hints; it is not limited to them.
+languages: [hi, kn, ta, te, bn, mr, en]
+
+# Names for each depth of the admin_units tree. Index = level column in the CSV.
+admin_levels: [country, state, district, block]
+
+# Which infrastructure indicator measures "how well served is this place already"
+# for each need type. Keys on the left come from need_taxonomy.yaml.
+indicator_map:
+  water:       water.piped_household_pct
+  road:        road.all_weather_connectivity_pct
+  electricity: power.household_electrified_pct
+  health:      health.phc_per_100k
+  education:   education.school_infra_index
+  sanitation:  sanitation.household_toilet_pct
+
+# Scoring weights. These encode a political judgement, not a technical one:
+# how much to favour the worst-off place vs the greatest number of people.
+# The ministry sets these. See docs/DECISIONS.md #8.
+#   demand   - how loudly this place is asking, vs the national norm
+#   deficit  - how far behind the country's best it already is
+#   reach    - how many people benefit (log-scaled)
+#   coverage - money already spent here; SUBTRACTS
+weights:
+  demand:   0.35
+  deficit:  0.30
+  reach:    0.15
+  coverage: 0.20
+
+# The coverage penalty applies ONLY to completed projects. Money that was
+# sanctioned but never delivered must not push a place down the list —
+# that case routes to the audit list instead. See docs/DECISIONS.md #8b.
+coverage_applies_to_status: [completed]
+
+privacy:
+  # Distinct reporters required before a cluster is DISPLAYED.
+  # Smaller clusters still count toward scoring — they just aren't shown
+  # as an identifiable pin. See docs/DECISIONS.md #9.
+  min_distinct_reporters: 5
+  media_retention_days: 90
+  redacted_text_retention_days: null   # null = indefinite
+
+thresholds:
+  # baseline_ratio at or above this counts as "high demand" for the verdict
+  high_demand_ratio: 2.0
+  # coverage at or above this counts as "money was allocated"
+  funded_coverage: 0.5
+  # cosine similarity above this, same reporter, within 7 days = duplicate
+  duplicate_similarity: 0.95
+  # cosine above this across DIFFERENT reporters in a short window = flag
+  coordinated_similarity: 0.97
+
+speech_provider: gemini   # alternative: bhashini

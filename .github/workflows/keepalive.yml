@@ -1,0 +1,33 @@
+# Supabase pauses a free-tier project after 7 consecutive days with no database
+# request. Submission is 23 Aug; Demo Day is 4 Sep. That is a 12-day gap in
+# which nobody would naturally touch the database -- so without this the
+# deployed link would be dead exactly when the judges open it.
+#
+# Render's free tier also spins a web service down after 15 minutes idle and
+# takes ~1 minute to wake. Pinging the API covers both problems at once.
+
+name: keepalive
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"   # twice a day, well inside both timeouts
+  workflow_dispatch:          # and runnable by hand before a demo
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the API and touch the database
+        env:
+          API_URL: ${{ secrets.SANGAM_API_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "SANGAM_API_URL secret not set - skipping."
+            echo "Set it in Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+          # /v1/countries reads the database, so this keeps Supabase awake too.
+          code=$(curl -s -o /tmp/out -w '%{http_code}' --max-time 90 "$API_URL/v1/countries")
+          echo "HTTP $code"
+          head -c 400 /tmp/out
+          test "$code" = "200"
