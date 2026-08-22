@@ -3,6 +3,10 @@
 **Full system design document:**
 https://claude.ai/code/artifact/ab991d55-d4c5-4c17-86e5-53449719f3db
 
+**Implementation Plan:**
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+
+
 Published 16 Aug 2026 · v1.0 · private artifact (share from the page's share menu)
 
 ---
