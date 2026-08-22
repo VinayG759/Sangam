@@ -26,8 +26,15 @@ jobs:
             echo "Set it in Settings > Secrets and variables > Actions."
             exit 0
           fi
-          # /v1/countries reads the database, so this keeps Supabase awake too.
-          code=$(curl -s -o /tmp/out -w '%{http_code}' --max-time 90 "$API_URL/v1/countries")
-          echo "HTTP $code"
+          # /health checks liveness, /api/v1/overview reads the database
+          echo "Pinging health..."
+          code=$(curl -s -o /tmp/health -w '%{http_code}' --max-time 90 "$API_URL/health")
+          echo "Health: HTTP $code"
+          head -c 400 /tmp/health
+          echo ""
+
+          echo "Pinging overview (touches database)..."
+          code=$(curl -s -o /tmp/out -w '%{http_code}' --max-time 90 "$API_URL/api/v1/overview")
+          echo "Overview: HTTP $code"
           head -c 400 /tmp/out
           test "$code" = "200"

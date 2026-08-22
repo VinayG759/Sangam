@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
-from sqlalchemy.orm import Session
-from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from typing import Optional
 from app.db import get_db
-from app.models.models import Priority, IssueCluster, AdminRegion, CitizenReport, Indicator, Expenditure
+from app.models.models import Priority, IssueCluster, AdminRegion, CitizenReport, Indicator, Expenditure, EvidenceBundle, NarrativeBrief
 from app.services.simulation_engine import simulation_engine
 from app.services.gemini_service import gemini_service
 from app.services.clustering_engine import clustering_engine
@@ -23,28 +25,38 @@ class CitizenInflowRequest(BaseModel):
 async def get_priorities(
     sector: Optional[str] = Query(None),
     verdict: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Returns ranked priorities with index scores, report counts, and region references.
     """
     try:
-        query = db.query(Priority).join(IssueCluster)
-        
+        stmt = (
+            select(Priority)
+            .join(IssueCluster)
+            .options(selectinload(Priority.cluster))
+        )
+
         if sector:
-            query = query.filter(IssueCluster.sector == sector)
+            stmt = stmt.where(IssueCluster.sector == sector)
         if verdict:
-            query = query.filter(Priority.verdict == verdict)
-            
+            stmt = stmt.where(Priority.verdict == verdict)
+
         # Order descending by priority score
-        priorities = query.order_by(Priority.score.desc()).all()
+        stmt = stmt.order_by(Priority.score.desc())
+        result = await db.execute(stmt)
+        priorities = result.scalars().all()
 
         output = []
         for p in priorities:
             cluster = p.cluster
-            region = db.query(AdminRegion).filter(AdminRegion.id == cluster.region_id).first()
+            # Fetch region name
+            region_result = await db.execute(
+                select(AdminRegion).where(AdminRegion.id == cluster.region_id)
+            )
+            region = region_result.scalar_one_or_none()
             region_name = region.name if region else "Unknown Ward"
-            
+
             output.append({
                 "id": p.id,
                 "cluster_id": cluster.id,
@@ -61,17 +73,25 @@ async def get_priorities(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/priorities/{priority_id}")
-async def get_priority_detail(priority_id: int, db: Session = Depends(get_db)):
+async def get_priority_detail(priority_id: int, db: AsyncSession = Depends(get_db)):
     """
     Returns details for a priority, including the immutable evidence bundle and narrative brief.
     """
-    p = db.query(Priority).filter(Priority.id == priority_id).first()
+    result = await db.execute(
+        select(Priority)
+        .where(Priority.id == priority_id)
+        .options(
+            selectinload(Priority.evidence_bundle),
+            selectinload(Priority.narrative_brief)
+        )
+    )
+    p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(status_code=404, detail="Priority record not found")
-        
+
     evidence = p.evidence_bundle
     brief = p.narrative_brief
-    
+
     return {
         "id": p.id,
         "score": p.score,
@@ -86,12 +106,20 @@ async def get_priority_detail(priority_id: int, db: Session = Depends(get_db)):
     }
 
 @router.post("/simulate")
-async def run_simulation(req: SimulationRequest, db: Session = Depends(get_db)):
+async def run_simulation(req: SimulationRequest, db: AsyncSession = Depends(get_db)):
     """
     Interactive what-if budget allocator simulator.
     """
     try:
-        priorities = db.query(Priority).all()
+        result = await db.execute(
+            select(Priority)
+            .options(
+                selectinload(Priority.cluster),
+                selectinload(Priority.evidence_bundle)
+            )
+        )
+        priorities = result.scalars().all()
+
         sim_input = []
         for p in priorities:
             cluster = p.cluster
@@ -99,7 +127,7 @@ async def run_simulation(req: SimulationRequest, db: Session = Depends(get_db)):
             cost_gap = 1500000.0 * cluster.report_count
             allocated_budget = 0.0
             vulnerability = 0.5
-            
+
             if eb:
                 cost_gap = eb.data.get("estimated_cost", cost_gap)
                 allocated_budget = eb.data.get("allocated_budget", 0.0)
@@ -128,7 +156,7 @@ async def run_simulation(req: SimulationRequest, db: Session = Depends(get_db)):
 @router.post("/ingest/citizen")
 async def ingest_citizen_report(
     req: CitizenInflowRequest,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Ingest a new citizen voice/text report, translate, analyze PII, and save to DB.
@@ -136,13 +164,13 @@ async def ingest_citizen_report(
     try:
         # Run Call 1 Gemini analysis
         analysis = gemini_service.analyze_citizen_report(req.text)
-        
+
         # Get semantic embedding
         embedding = gemini_service.get_embedding(analysis.get("english_translation", req.text))
-        
+
         # Save report
         location_wkt = None
-        if req.latitude and req.longitude:
+        if req.latitude is not None and req.longitude is not None:
             location_wkt = f"SRID=4326;POINT({req.longitude} {req.latitude})"
 
         report = CitizenReport(
@@ -158,24 +186,31 @@ async def ingest_citizen_report(
             embedding=embedding
         )
         db.add(report)
-        db.commit()
-        
+        await db.flush()
+
         return {
             "status": "success",
             "report_id": report.id,
             "analysis_extracted": analysis
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reprocess")
-async def trigger_reprocessing(db: Session = Depends(get_db)):
+async def trigger_reprocessing(db: AsyncSession = Depends(get_db)):
     """
     Trigger the spatial clustering and priority scoring pipeline manually.
+    Note: The clustering engine uses a sync session internally since it performs
+    complex multi-step transactions with PostGIS operations.
     """
+    from app.db import SessionLocal
     try:
-        clustering_engine.process_and_prioritize(db)
+        sync_db = SessionLocal()
+        try:
+            clustering_engine.process_and_prioritize(sync_db)
+        finally:
+            sync_db.close()
         return {"status": "success", "message": "Reprocessing pipeline completed successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

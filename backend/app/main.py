@@ -26,7 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/health")
+# ── Root & Health endpoints (no prefix) ─────────────────────────────────────
+
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "message": "Welcome to the Sangam DPG API. Visit /docs for the interactive API specification."
+    }
+
+@app.get("/health", tags=["Root"])
 async def health_check():
     return {
         "status": "healthy",
@@ -34,15 +42,11 @@ async def health_check():
         "active_pack": settings.ACTIVE_COUNTRY_PACK
     }
 
-from app.routes.overview import router as overview_router
-from app.routes.priorities import router as priorities_router
+# ── Register all API route groups from centralized registry ─────────────────
 
-app.include_router(overview_router)
-app.include_router(priorities_router)
+from app.routes import all_routers
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Welcome to the Sangam DPG API. Visit /docs for the interactive API specification."
-    }
+for router in all_routers:
+    app.include_router(router)
 
+logger.info(f"Registered {len(all_routers)} API route groups")

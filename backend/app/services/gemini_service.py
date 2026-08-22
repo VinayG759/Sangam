@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types
@@ -130,4 +131,3 @@ class GeminiService:
             }
 
 gemini_service = GeminiService()
-import os

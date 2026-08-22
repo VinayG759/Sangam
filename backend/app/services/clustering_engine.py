@@ -1,5 +1,5 @@
 import logging
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from app.models.models import CitizenReport, Expenditure, AdminRegion, IssueCluster, Priority, EvidenceBundle, NarrativeBrief, Indicator
 from app.services.scoring_engine import scoring_engine
@@ -189,4 +189,3 @@ class ClusteringEngine:
             raise
 
 clustering_engine = ClusteringEngine()
-from sqlalchemy import func

@@ -1,34 +1,49 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 from app.db import get_db
 from app.models.models import CitizenReport, Expenditure, Priority, IssueCluster
 
 router = APIRouter(prefix="/api/v1", tags=["Overview"])
 
 @router.get("/overview")
-async def get_overview(db: Session = Depends(get_db)):
+async def get_overview(db: AsyncSession = Depends(get_db)):
     """
     Returns high-level metric cards for the main dashboard view.
     """
     try:
-        total_reports = db.query(func.count(CitizenReport.id)).scalar() or 0
-        total_expenditure = db.query(func.sum(Expenditure.amount)).scalar() or 0.0
-        
-        # Calculate unserved gaps (Priority verdict is UNSERVED_GAP)
-        unserved_gaps_count = db.query(func.count(Priority.id)).filter(Priority.verdict == "UNSERVED_GAP").scalar() or 0
-        
-        # Calculate stalled allocations (Priority verdict is STALLED_ALLOCATION)
-        stalled_projects_count = db.query(func.count(Priority.id)).filter(Priority.verdict == "STALLED_ALLOCATION").scalar() or 0
-        
+        # Total citizen reports
+        result = await db.execute(select(func.count(CitizenReport.id)))
+        total_reports = result.scalar() or 0
+
+        # Total sanctioned expenditure
+        result = await db.execute(select(func.sum(Expenditure.amount)))
+        total_expenditure = result.scalar() or 0.0
+
+        # Unserved gaps count (Priority verdict is UNSERVED_GAP)
+        result = await db.execute(
+            select(func.count(Priority.id)).where(Priority.verdict == "UNSERVED_GAP")
+        )
+        unserved_gaps_count = result.scalar() or 0
+
+        # Stalled allocations count (Priority verdict is STALLED_ALLOCATION)
+        result = await db.execute(
+            select(func.count(Priority.id)).where(Priority.verdict == "STALLED_ALLOCATION")
+        )
+        stalled_projects_count = result.scalar() or 0
+
         # Stalled capital sum
-        stalled_capital = db.query(func.sum(Expenditure.amount)).filter(Expenditure.status == "stalled").scalar() or 0.0
+        result = await db.execute(
+            select(func.sum(Expenditure.amount)).where(Expenditure.status == "stalled")
+        )
+        stalled_capital = result.scalar() or 0.0
 
         # Sector breakdown of citizen reports
-        sector_counts = db.query(
-            CitizenReport.sector, func.count(CitizenReport.id)
-        ).group_by(CitizenReport.sector).all()
-        
+        result = await db.execute(
+            select(CitizenReport.sector, func.count(CitizenReport.id))
+            .group_by(CitizenReport.sector)
+        )
+        sector_counts = result.all()
         sectors_breakdown = {sector: count for sector, count in sector_counts}
 
         return {

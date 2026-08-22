@@ -1,5 +1,5 @@
 country_code: "DEFAULT"
-country_name: "Default Template"
+region_name: "Default Template"
 languages:
   - code: "en"
     name: "English"
