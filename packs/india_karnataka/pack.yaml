@@ -1,0 +1,32 @@
+country_code: "IND"
+region_name: "Karnataka"
+languages:
+  - code: "kn"
+    name: "Kannada"
+    is_default: true
+  - code: "en"
+    name: "English"
+    is_default: false
+  - code: "hi"
+    name: "Hindi"
+    is_default: false
+
+sectors:
+  - key: "water"
+    name: "Drinking Water & Borewells"
+  - key: "roads"
+    name: "Road Repairs & Potholes"
+  - key: "sanitation"
+    name: "Sewage & Waste Management"
+  - key: "health"
+    name: "Primary Health Centres"
+  - key: "education"
+    name: "Government Schools"
+  - key: "electricity"
+    name: "Grid Power & BESCOM"
+
+weights:
+  demand_density: 0.35
+  vulnerability_index: 0.35
+  expenditure_gap: 0.20
+  urgency: 0.10

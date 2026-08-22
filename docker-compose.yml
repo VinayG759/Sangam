@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sangam — Docker Compose (Local Development)
+# ─────────────────────────────────────────────────────────────────────────────
+# Usage:
+#   cp .env.example .env          # fill in GEMINI_API_KEY
+#   docker compose up --build     # start everything
+#   docker compose up --build -d  # start in background
+#
+# First run with demo data:
+#   SEED_DB=true docker compose up --build
+#
+# Access:
+#   API:     http://localhost:8000
+#   Swagger: http://localhost:8000/docs
+#   DB:      localhost:5432 (user: postgres, password: postgres, db: sangam)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL with PostGIS + pgvector ──────────────────────────────────
+  db:
+    image: supabase/postgres:15.6.0
+    container_name: sangam-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sangam
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      JWT_SECRET: super-secret-jwt-token-for-local-dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sangam"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sangam-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sangam
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/sangam
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=gemini-2.5-flash
+      - GEMINI_EMBEDDING_MODEL=text-embedding-004
+      - ACTIVE_COUNTRY_PACK=india_karnataka
+      - PACKS_DIR=/workspace/packs
+      - SEED_DB=${SEED_DB:-false}
+    volumes:
+      # Mount packs from the repo root so the container has access
+      - ./packs:/workspace/packs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pgdata:

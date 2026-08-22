@@ -1,12 +1,26 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
+*$py.class
 venv/
-env/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
+.venv/
+.env
+*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+
+# IDE / System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
 
 # Node
 node_modules/

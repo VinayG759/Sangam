@@ -1,0 +1,69 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# Sangam Backend — Docker Entrypoint Script
+# ─────────────────────────────────────────────────────────────────────────────
+# This script runs BEFORE uvicorn starts. It:
+# 1. Waits for PostgreSQL to be ready
+# 2. Initializes the database (creates tables + extensions)
+# 3. Optionally seeds demo data (if SEED_DB=true)
+# 4. Starts the application (exec's into CMD)
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -e
+
+echo "╔══════════════════════════════════════════════╗"
+echo "║         Sangam Backend — Starting            ║"
+echo "╚══════════════════════════════════════════════╝"
+
+# ── Step 1: Wait for database ──────────────────────────────────────────────
+echo "[entrypoint] Waiting for database to be ready..."
+
+MAX_RETRIES=30
+RETRY_INTERVAL=2
+RETRIES=0
+
+while [ $RETRIES -lt $MAX_RETRIES ]; do
+    if python -c "
+from sqlalchemy import create_engine, text
+import os
+url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/sangam')
+engine = create_engine(url)
+with engine.connect() as conn:
+    conn.execute(text('SELECT 1'))
+print('OK')
+" 2>/dev/null; then
+        echo "[entrypoint] Database is ready."
+        break
+    fi
+    RETRIES=$((RETRIES + 1))
+    echo "[entrypoint] Database not ready (attempt $RETRIES/$MAX_RETRIES). Retrying in ${RETRY_INTERVAL}s..."
+    sleep $RETRY_INTERVAL
+done
+
+if [ $RETRIES -ge $MAX_RETRIES ]; then
+    echo "[entrypoint] ERROR: Database did not become ready after $MAX_RETRIES attempts."
+    exit 1
+fi
+
+# ── Step 2: Initialize database (extensions + tables) ──────────────────────
+echo "[entrypoint] Initializing database (extensions + tables)..."
+python -m app.utils.db_init || {
+    echo "[entrypoint] WARNING: Database initialization failed (extensions may require superuser). Continuing..."
+}
+
+# ── Step 3: Optional data seeding ──────────────────────────────────────────
+if [ "${SEED_DB}" = "true" ]; then
+    echo "[entrypoint] SEED_DB=true — seeding demo data..."
+    python -m app.utils.db_seed || {
+        echo "[entrypoint] WARNING: Seeding failed. Continuing without seed data."
+    }
+else
+    echo "[entrypoint] SEED_DB not set — skipping data seeding."
+    echo "[entrypoint] Set SEED_DB=true in docker-compose to auto-seed on first run."
+fi
+
+echo "[entrypoint] Startup complete. Launching application..."
+echo "─────────────────────────────────────────────────"
+
+# ── Step 4: Execute the CMD (uvicorn) ──────────────────────────────────────
+exec "$@"
