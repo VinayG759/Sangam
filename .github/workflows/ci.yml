@@ -46,8 +46,9 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short -q
         env:
-          # Use SQLite-compatible defaults so tests don't need Postgres
-          DATABASE_URL: "sqlite:///test.db"
+          # Use a dummy PostgreSQL URL so that create_async_engine can resolve the asyncpg driver
+          # (all actual database calls are mocked during tests).
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/sangam"
           ACTIVE_COUNTRY_PACK: "india_karnataka"
           PACKS_DIR: "../packs"
 
@@ -67,9 +68,9 @@ jobs:
 
       - name: Verify image runs
         run: |
-          # Start container in background (will fail healthcheck without DB, but should start)
+          # Start container in background
           docker run -d --name test-backend \
-            -e DATABASE_URL=sqlite:///test.db \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sangam \
             -e ACTIVE_COUNTRY_PACK=default \
             -e PACKS_DIR=../packs \
             -p 8000:8000 \
