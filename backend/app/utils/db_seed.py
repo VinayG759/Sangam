@@ -2,7 +2,10 @@ import logging
 import os
 from sqlalchemy.orm import Session
 from app.db import SessionLocal, engine
-from app.models.models import AdminRegion, CitizenReport, Expenditure, Indicator
+from app.models.models import (
+    AdminRegion, AnalysisRun, CitizenReport, EvidenceBundle, Expenditure,
+    Indicator, IssueCluster, NarrativeBrief, Priority,
+)
 from app.services.gemini_service import gemini_service
 
 logging.basicConfig(level=logging.INFO)
@@ -39,8 +42,19 @@ def seed_data():
                 "FORCE_RESEED=true and re-run."
             )
 
-        # 1. Clean existing data
+        # 1. Clean existing data, children before parents (FK order). A prior
+        # /reprocess run leaves issue_clusters/priorities/etc. referencing
+        # admin_regions -- deleting admin_regions first, as this used to do,
+        # hits a ForeignKeyViolation on any database that has ever run the
+        # clustering pipeline once. Reseeding raw data while leaving that
+        # derived data behind is incoherent anyway (it would reference
+        # regions that no longer exist post-reseed), so clear all of it.
         logger.info("Clearing old tables...")
+        db.query(NarrativeBrief).delete()
+        db.query(EvidenceBundle).delete()
+        db.query(Priority).delete()
+        db.query(IssueCluster).delete()
+        db.query(AnalysisRun).delete()
         db.query(Indicator).delete()
         db.query(Expenditure).delete()
         db.query(CitizenReport).delete()
