@@ -134,9 +134,23 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
             r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
             r = r_res.scalar_one_or_none()
             tracking_id = r.tracking_id if r else "Unknown"
-            
-            await _send_telegram_message(chat_id, f"We couldn't precisely locate that place, but your report is saved. Tracking ID: {tracking_id}", bot_token)
-            return
+
+            # Don't discard this message here. A reply that fails to match a
+            # known place name is far more often unrelated new content --
+            # another report, a question, anything -- than a genuine failed
+            # location guess (reproduced live: a real new report sent right
+            # after a location prompt was being silently thrown away here,
+            # attributed to the *previous* report's tracking ID with no
+            # trace of its own text ever existing). Tell the citizen what
+            # happened to the earlier report, then fall through to the
+            # normal ingestion path below so this message gets its own
+            # tracking ID instead of vanishing.
+            await _send_telegram_message(
+                chat_id,
+                f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
+                "it's saved without one. Treating this message as a new report...",
+                bot_token
+            )
 
     if not text and not audio_bytes:
         await _send_telegram_message(chat_id, "Please send a text message, a voice note, or a photo describing the infrastructure issue.", bot_token)

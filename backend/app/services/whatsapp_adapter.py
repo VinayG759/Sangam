@@ -140,8 +140,16 @@ async def handle_whatsapp_update(payload: Dict[str, Any], db: AsyncSession) -> N
             r = r_res.scalar_one_or_none()
             tracking_id = r.tracking_id if r else "Unknown"
 
-            await _send_whatsapp_message(from_number, f"We couldn't precisely locate that place, but your report is saved. Tracking ID: {tracking_id}", access_token, phone_number_id)
-            return
+            # See the matching comment in telegram_adapter.py: a reply that
+            # fails to match a known place name is far more often unrelated
+            # new content than a genuine failed location guess, so it falls
+            # through to normal ingestion below instead of being discarded.
+            await _send_whatsapp_message(
+                from_number,
+                f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
+                "it's saved without one. Treating this message as a new report...",
+                access_token, phone_number_id
+            )
 
     if not text and not audio_bytes:
         await _send_whatsapp_message(from_number, "Please send a text message, a voice note, or a photo describing the infrastructure issue.", access_token, phone_number_id)

@@ -105,6 +105,59 @@ async def test_handle_whatsapp_update_text(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pending_location_reply_that_fails_to_resolve_is_ingested_as_new_report(monkeypatch):
+    # Mirrors the equivalent telegram_adapter.py test/fix: a reply that
+    # doesn't match a known place name must not be silently discarded.
+    import app.services.whatsapp_adapter as whatsapp_module
+    from app.models.models import PendingIntake, CitizenReport
+
+    pending = PendingIntake(
+        channel_user_hash="irrelevant",
+        awaiting="location",
+        partial_report={"report_id": 42},
+        expires_at=whatsapp_module.datetime(2999, 1, 1),
+    )
+    old_report = MagicMock(spec=CitizenReport)
+    old_report.tracking_id = "SNG-OLD1"
+
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.delete = AsyncMock()
+
+    pending_lookup = MagicMock()
+    pending_lookup.scalar_one_or_none.return_value = pending
+    old_report_lookup = MagicMock()
+    old_report_lookup.scalar_one_or_none.return_value = old_report
+    mock_session.execute.side_effect = [pending_lookup, old_report_lookup]
+
+    monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "test_token")
+    monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "123456789")
+    monkeypatch.setattr(whatsapp_module, "resolve_location", AsyncMock(return_value=None))
+
+    mock_ingest = AsyncMock(return_value={"tracking_id": "SNG-NEW2"})
+    monkeypatch.setattr(whatsapp_module, "ingest_citizen_message", mock_ingest)
+
+    mock_send = AsyncMock()
+    monkeypatch.setattr(whatsapp_module, "_send_whatsapp_message", mock_send)
+
+    payload = _text_payload(from_number="911234567890", body="who is narendra modi")
+
+    await handle_whatsapp_update(payload, mock_session)
+
+    mock_ingest.assert_called_once_with(
+        db=mock_session,
+        text="who is narendra modi",
+        audio_bytes=None,
+        mime_type=None,
+        channel="whatsapp",
+        channel_user_id="911234567890",
+    )
+    assert mock_send.call_count == 2
+    assert "SNG-OLD1" in mock_send.call_args_list[0][0][1]
+    assert "SNG-NEW2" in mock_send.call_args_list[1][0][1]
+
+
+@pytest.mark.asyncio
 async def test_handle_whatsapp_update_status_callback_is_ignored(monkeypatch):
     mock_session = AsyncMock()
 
