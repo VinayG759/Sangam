@@ -29,10 +29,12 @@ def seed_data():
         # seed BEFORE load_real_data.py on a fresh database, so no real
         # reports exist yet and this check passes through silently; it only
         # ever fires on a database that already has real citizen activity.
+        force_reseed = os.environ.get("FORCE_RESEED") == "true"
+
         real_report_count = db.query(CitizenReport).filter(
             CitizenReport.tracking_id.isnot(None)
         ).count()
-        if real_report_count > 0 and os.environ.get("FORCE_RESEED") != "true":
+        if real_report_count > 0 and not force_reseed:
             raise RealDataPresentError(
                 f"Refusing to seed: {real_report_count} citizen_reports row(s) already have "
                 "a tracking_id, meaning they came from a real citizen, not this demo script. "
@@ -41,6 +43,23 @@ def seed_data():
                 "If this is a demo environment you are intentionally resetting, set "
                 "FORCE_RESEED=true and re-run."
             )
+
+        # 0b. Idempotency guard. docker-entrypoint.sh runs this on every
+        # container start whenever SEED_DB=true, with no way to tell "first
+        # boot" from "the fifth redeploy" -- without this, every redeploy
+        # silently wipes the demo dataset and, with it, any /reprocess-
+        # derived clusters/priorities, back to an empty dashboard (this
+        # happened live: adding an unrelated env var on Render triggered a
+        # redeploy that reset everything). Once data exists, re-seeding is
+        # a deliberate action (FORCE_RESEED=true), not an automatic one.
+        total_report_count = db.query(CitizenReport).count()
+        if total_report_count > 0 and not force_reseed:
+            logger.info(
+                f"Database already has {total_report_count} citizen_reports row(s) -- "
+                "seeding already ran, skipping. Set FORCE_RESEED=true to wipe and reseed "
+                "intentionally."
+            )
+            return
 
         # 1. Clean existing data, children before parents (FK order). A prior
         # /reprocess run leaves issue_clusters/priorities/etc. referencing
