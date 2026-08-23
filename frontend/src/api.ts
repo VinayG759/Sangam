@@ -39,10 +39,11 @@ export interface Priority {
   title: string;
   sector: string;
   score: number;
-  verdict: 'UNSERVED_GAP' | 'STALLED_ALLOCATION' | 'UNDERFUNDED_CRITICAL' | 'WELL_SERVED';
+  verdict: 'UNSERVED_GAP' | 'STALLED_ALLOCATION' | 'UNDERFUNDED_CRITICAL' | 'DELIVERY_GAP' | 'WELL_SERVED';
   report_count: number;
   region_name: string;
   details: Record<string, unknown> | null;
+  list_type: 'fund' | 'audit';
 }
 
 export interface NarrativeBrief {
@@ -121,6 +122,8 @@ export interface Cluster {
   region_name: string;
   report_count: number;
   created_at: string | null;
+  centroid: string | null;
+  is_approximate_location: boolean;
   priority: { id: number; score: number; verdict: string } | null;
 }
 
@@ -156,4 +159,16 @@ export const api = {
 
   simulate: (available_budget: number, strategy: string) =>
     post<SimulationResult>('/api/v1/simulate', { available_budget, strategy }),
+
+  submitCitizenReport: (data: FormData) => {
+    return fetch(`${BASE}/api/v1/ingest/citizen`, {
+      method: 'POST',
+      body: data
+    }).then(res => {
+      if (!res.ok) throw new Error(`POST /api/v1/ingest/citizen failed: ${res.status}`);
+      return res.json() as Promise<{ tracking_id: string; [key: string]: any }>;
+    })
+  },
+
+  checkStatus: (trackingId: string) => get<Record<string, unknown>>(`/api/v1/citizens/${encodeURIComponent(trackingId)}`),
 };

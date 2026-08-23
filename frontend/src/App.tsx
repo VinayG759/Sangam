@@ -61,6 +61,7 @@ export default function App() {
     { value: 'UNSERVED_GAP',        label: 'Unserved Gap' },
     { value: 'STALLED_ALLOCATION',  label: 'Stalled Allocation' },
     { value: 'UNDERFUNDED_CRITICAL',label: 'Underfunded Critical' },
+    { value: 'DELIVERY_GAP',        label: 'Delivery Gap' },
     { value: 'WELL_SERVED',         label: 'Well Served' },
   ]
 
@@ -173,13 +174,29 @@ export default function App() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 20, alignItems: 'start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  <PriorityList
-                    priorities={priorities}
-                    selectedId={selected?.id ?? null}
-                    onSelect={p => setSelected(p === selected ? null : p)}
-                    loading={loadingPriorities}
-                  />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Funding Queue</h2>
+                    <PriorityList
+                      priorities={priorities.filter(p => p.list_type === 'fund')}
+                      selectedId={selected?.id ?? null}
+                      onSelect={p => setSelected(p === selected ? null : p)}
+                      loading={loadingPriorities}
+                    />
+                  </div>
+                  
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8, color: 'var(--accent-amber)' }}>Audit & Investigation</h2>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+                      Anomalies with very low report volume but apparent funding gaps. Require manual verification.
+                    </p>
+                    <PriorityList
+                      priorities={priorities.filter(p => p.list_type === 'audit')}
+                      selectedId={selected?.id ?? null}
+                      onSelect={p => setSelected(p === selected ? null : p)}
+                      loading={loadingPriorities}
+                    />
+                  </div>
                 </div>
 
                 {selected && (

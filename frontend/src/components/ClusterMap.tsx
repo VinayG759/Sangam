@@ -10,12 +10,24 @@ const VERDICT_COLORS: Record<string, string> = {
   UNSERVED_GAP:        '#ef4444',
   STALLED_ALLOCATION:  '#f97316',
   UNDERFUNDED_CRITICAL:'#eab308',
+  DELIVERY_GAP:        '#8b5cf6',
   WELL_SERVED:         '#10b981',
 }
 
 const SECTOR_SYMBOLS: Record<string, string> = {
   water: '💧', roads: '🛣️', sanitation: '♻️',
   health: '🏥', education: '🏫', electricity: '⚡',
+}
+
+function parsePoint(wkt: string | null): [number, number] | null {
+  if (!wkt) return null;
+  const match = wkt.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
+  if (match) {
+    const lng = parseFloat(match[1]);
+    const lat = parseFloat(match[2]);
+    return [lat, lng];
+  }
+  return null;
 }
 
 function makeMarkerIcon(color: string, emoji: string) {
@@ -80,10 +92,10 @@ export default function ClusterMap({ clusters }: ClusterMapProps) {
     const bounds: [number, number][] = []
 
     clusters.forEach(c => {
-      // Use Karnataka center + jitter if no real coords (backend returns centroid from PostGIS)
-      // In production this will use actual cluster centroids; for demo we jitter around KA
-      const lat = 14.5 + (c.id * 0.73) % 3.5 - 1.75 + Math.sin(c.id * 2.4) * 0.5
-      const lng = 74.5 + (c.id * 0.91) % 3.0 - 1.5  + Math.cos(c.id * 1.7) * 0.4
+      // Skip plotting clusters that don't have a centroid (due to aggregation floor)
+      const coords = parsePoint(c.centroid);
+      if (!coords) return;
+      const [lat, lng] = coords;
 
       bounds.push([lat, lng])
 
@@ -96,7 +108,7 @@ export default function ClusterMap({ clusters }: ClusterMapProps) {
         <div style="min-width: 180px;">
           <div style="font-weight: 700; font-size: 13px; margin-bottom: 6px; color: #f0f6ff;">${c.title}</div>
           <div style="font-size: 11px; color: #8ba4cc; margin-bottom: 4px;">
-            ${c.region_name} · ${c.report_count} reports
+            ${c.region_name} · ${c.report_count} reports ${c.is_approximate_location ? '<br/><span style="color: #fbbf24;">(Approximate Location)</span>' : ''}
           </div>
           ${c.priority ? `
             <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">

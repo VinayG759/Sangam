@@ -11,6 +11,7 @@ const VERDICT_META: Record<string, { label: string; cls: string; color: string }
   UNSERVED_GAP:       { label: 'Unserved Gap',       cls: 'badge-unserved',    color: 'var(--verdict-unserved)' },
   STALLED_ALLOCATION: { label: 'Stalled Allocation',  cls: 'badge-stalled',     color: 'var(--verdict-stalled)' },
   UNDERFUNDED_CRITICAL:{ label: 'Underfunded',        cls: 'badge-underfunded', color: 'var(--verdict-underfunded)' },
+  DELIVERY_GAP:       { label: 'Delivery Gap',         cls: 'badge-deliverygap', color: 'var(--verdict-deliverygap)' },
   WELL_SERVED:        { label: 'Well Served',         cls: 'badge-wellserved',  color: 'var(--verdict-wellserved)' },
 }
 

@@ -48,6 +48,14 @@ export default function PriorityCard({ priority }: PriorityCardProps) {
           <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
             {priority.region_name}
           </span>
+          {Boolean(priority.details?.partial_evidence) && (
+            <>
+              <span style={{ color: 'var(--text-muted)' }}>·</span>
+              <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, border: '1px solid #fcd34d', padding: '2px 4px', borderRadius: 4 }}>
+                Partial Evidence
+              </span>
+            </>
+          )}
         </div>
       </div>
 

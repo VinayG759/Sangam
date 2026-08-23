@@ -39,6 +39,7 @@
   --verdict-unserved:    #ef4444;
   --verdict-stalled:     #f97316;
   --verdict-underfunded: #eab308;
+  --verdict-deliverygap: #8b5cf6;
   --verdict-wellserved:  #10b981;
 
   /* Sector palette */
@@ -158,6 +159,7 @@ h4, h5, h6, p, span, label {
 .badge-unserved    { background: rgba(239, 68, 68, 0.15);  color: var(--verdict-unserved);    border: 1px solid rgba(239, 68, 68, 0.3); }
 .badge-stalled     { background: rgba(249, 115, 22, 0.15); color: var(--verdict-stalled);     border: 1px solid rgba(249, 115, 22, 0.3); }
 .badge-underfunded { background: rgba(234, 179, 8, 0.15);  color: var(--verdict-underfunded); border: 1px solid rgba(234, 179, 8, 0.3); }
+.badge-deliverygap { background: rgba(139, 92, 246, 0.15);  color: var(--verdict-deliverygap); border: 1px solid rgba(139, 92, 246, 0.3); }
 .badge-wellserved  { background: rgba(16, 185, 129, 0.15); color: var(--verdict-wellserved);  border: 1px solid rgba(16, 185, 129, 0.3); }
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
