@@ -72,3 +72,48 @@ async def test_handle_telegram_update_photo(monkeypatch):
     )
 
     mock_send.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_telegram_update_start_command_is_not_ingested(monkeypatch):
+    # Telegram sends "/start" the moment someone opens the bot -- this must
+    # not be treated as citizen report content (reproduced live: it was
+    # going straight to Gemini and getting saved as a real report).
+    mock_session = AsyncMock()
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_bot_token")
+
+    mock_ingest = AsyncMock()
+    import app.services.telegram_adapter as telegram_module
+    monkeypatch.setattr(telegram_module, "ingest_citizen_message", mock_ingest)
+
+    mock_send = AsyncMock()
+    monkeypatch.setattr(telegram_module, "_send_telegram_message", mock_send)
+
+    update_payload = {"message": {"chat": {"id": 123456}, "text": "/start"}}
+
+    await handle_telegram_update(update_payload, mock_session)
+
+    mock_ingest.assert_not_called()
+    mock_send.assert_called_once()
+    assert mock_send.call_args[0][0] == 123456
+    assert "Welcome" in mock_send.call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_handle_telegram_update_other_command_is_not_ingested(monkeypatch):
+    mock_session = AsyncMock()
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_bot_token")
+
+    mock_ingest = AsyncMock()
+    import app.services.telegram_adapter as telegram_module
+    monkeypatch.setattr(telegram_module, "ingest_citizen_message", mock_ingest)
+
+    mock_send = AsyncMock()
+    monkeypatch.setattr(telegram_module, "_send_telegram_message", mock_send)
+
+    update_payload = {"message": {"chat": {"id": 123456}, "text": "/help@Ghgggggjsbcjzgabckxbot"}}
+
+    await handle_telegram_update(update_payload, mock_session)
+
+    mock_ingest.assert_not_called()
+    mock_send.assert_called_once()

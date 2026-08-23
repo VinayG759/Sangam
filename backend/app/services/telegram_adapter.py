@@ -35,7 +35,32 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
     text = message.get("text")
     voice = message.get("voice")
     photo = message.get("photo")
-    
+
+    # Telegram auto-sends "/start" (and users can send any other bot
+    # command) the moment someone opens the bot -- without this, that text
+    # was going straight into ingest_citizen_message as if it were a real
+    # citizen report. Reproduced live: report id 91's translated_text is
+    # literally "No report provided." because Gemini was handed "/start"
+    # and did its best with it.
+    if text and text.startswith("/"):
+        command = text.split()[0].split("@")[0]
+        if command == "/start":
+            await _send_telegram_message(
+                chat_id,
+                "Welcome to Sangam. Send a text message, voice note, or photo describing "
+                "an infrastructure issue (potholes, water supply, garbage, power, etc.) "
+                "and your local ward or area name, and we'll log it.",
+                bot_token,
+            )
+        else:
+            await _send_telegram_message(
+                chat_id,
+                "Send a text message, voice note, or photo describing the infrastructure "
+                "issue you'd like to report.",
+                bot_token,
+            )
+        return
+
     audio_bytes = None
     mime_type = None
     
