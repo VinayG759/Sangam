@@ -43,6 +43,16 @@ class Settings(BaseSettings):
 
     def __init__(self, **values):
         super().__init__(**values)
+        # Some PaaS env-var UIs (confirmed on Render) save a trailing
+        # newline/whitespace when a value is pasted into a multi-line
+        # textarea instead of trimming it. libpq then treats it as part of
+        # the dbname itself -- e.g. "postgres\n" -- and fails with a
+        # confusing "database does not exist" rather than any hint about
+        # whitespace. Stripping here makes the app immune regardless of
+        # what the hosting UI does with pasted values.
+        self.DATABASE_URL = self.DATABASE_URL.strip()
+        if self.ASYNC_DATABASE_URL:
+            self.ASYNC_DATABASE_URL = self.ASYNC_DATABASE_URL.strip()
         # Automatically generate async database URL from sync URL if not explicitly provided
         if not self.ASYNC_DATABASE_URL and self.DATABASE_URL:
             # Replace postgresql:// with postgresql+asyncpg://

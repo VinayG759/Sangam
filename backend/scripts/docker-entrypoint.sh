@@ -26,7 +26,7 @@ while [ $RETRIES -lt $MAX_RETRIES ]; do
     if python -c "
 from sqlalchemy import create_engine, text
 import os, sys
-url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/sangam')
+url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/sangam').strip()
 try:
     engine = create_engine(url, connect_args={'connect_timeout': 10})
     with engine.connect() as conn:
