@@ -105,6 +105,46 @@ async def test_handle_whatsapp_update_text(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pending_location_reply_that_crashes_still_gets_a_reply(monkeypatch):
+    # Mirrors the equivalent telegram_adapter.py test/fix.
+    import app.services.whatsapp_adapter as whatsapp_module
+    from app.models.models import PendingIntake
+
+    pending = PendingIntake(
+        channel_user_hash="irrelevant",
+        awaiting="location",
+        partial_report={"report_id": 42},
+        expires_at=whatsapp_module.datetime(2999, 1, 1),
+    )
+
+    mock_session = AsyncMock()
+    mock_session.delete = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
+    pending_lookup = MagicMock()
+    pending_lookup.scalar_one_or_none.return_value = pending
+    mock_session.execute.side_effect = [pending_lookup]
+
+    monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "test_token")
+    monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "123456789")
+    monkeypatch.setattr(whatsapp_module, "resolve_location", AsyncMock(side_effect=RuntimeError("boom")))
+
+    mock_ingest = AsyncMock()
+    monkeypatch.setattr(whatsapp_module, "ingest_citizen_message", mock_ingest)
+    mock_send = AsyncMock()
+    monkeypatch.setattr(whatsapp_module, "_send_whatsapp_message", mock_send)
+
+    payload = _text_payload(from_number="911234567890", body="anything")
+
+    await handle_whatsapp_update(payload, mock_session)
+
+    mock_session.rollback.assert_called_once()
+    mock_ingest.assert_not_called()
+    mock_send.assert_called_once()
+    assert "error" in mock_send.call_args[0][1].lower()
+
+
+@pytest.mark.asyncio
 async def test_pending_location_reply_that_fails_to_resolve_is_ingested_as_new_report(monkeypatch):
     # Mirrors the equivalent telegram_adapter.py test/fix: a reply that
     # doesn't match a known place name must not be silently discarded.

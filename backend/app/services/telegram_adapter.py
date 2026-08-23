@@ -104,53 +104,66 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
     pending = db_result.scalar_one_or_none()
     
     if pending and pending.awaiting == "location" and text:
-        # Resolve location
-        region = await resolve_location(
-            text,
-            pack_loader.load_active_pack().country_code,
-            db
-        )
-        report_id = pending.partial_report.get("report_id")
-        
-        # We always delete the pending state after one try
-        await db.delete(pending)
-        
-        if region and report_id:
-            await db.execute(
-                update(CitizenReport)
-                .where(CitizenReport.id == report_id)
-                .values(region_id=region.id)
+        try:
+            # Resolve location
+            region = await resolve_location(
+                text,
+                pack_loader.load_active_pack().country_code,
+                db
             )
-            await db.commit()
-            
-            r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
-            r = r_res.scalar_one_or_none()
-            tracking_id = r.tracking_id if r else "Unknown"
-            
-            await _send_telegram_message(chat_id, f"Location updated successfully. Thank you. Tracking ID: {tracking_id}", bot_token)
-            return
-        elif report_id:
-            await db.commit()
-            r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
-            r = r_res.scalar_one_or_none()
-            tracking_id = r.tracking_id if r else "Unknown"
+            report_id = pending.partial_report.get("report_id")
 
-            # Don't discard this message here. A reply that fails to match a
-            # known place name is far more often unrelated new content --
-            # another report, a question, anything -- than a genuine failed
-            # location guess (reproduced live: a real new report sent right
-            # after a location prompt was being silently thrown away here,
-            # attributed to the *previous* report's tracking ID with no
-            # trace of its own text ever existing). Tell the citizen what
-            # happened to the earlier report, then fall through to the
-            # normal ingestion path below so this message gets its own
-            # tracking ID instead of vanishing.
-            await _send_telegram_message(
-                chat_id,
-                f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
-                "it's saved without one. Treating this message as a new report...",
-                bot_token
-            )
+            # We always delete the pending state after one try
+            await db.delete(pending)
+
+            if region and report_id:
+                await db.execute(
+                    update(CitizenReport)
+                    .where(CitizenReport.id == report_id)
+                    .values(region_id=region.id)
+                )
+                await db.commit()
+
+                r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                r = r_res.scalar_one_or_none()
+                tracking_id = r.tracking_id if r else "Unknown"
+
+                await _send_telegram_message(chat_id, f"Location updated successfully. Thank you. Tracking ID: {tracking_id}", bot_token)
+                return
+            elif report_id:
+                await db.commit()
+                r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                r = r_res.scalar_one_or_none()
+                tracking_id = r.tracking_id if r else "Unknown"
+
+                # Don't discard this message here. A reply that fails to match
+                # a known place name is far more often unrelated new content
+                # -- another report, a question, anything -- than a genuine
+                # failed location guess (reproduced live: a real new report
+                # sent right after a location prompt was being silently
+                # thrown away here, attributed to the *previous* report's
+                # tracking ID with no trace of its own text ever existing).
+                # Tell the citizen what happened to the earlier report, then
+                # fall through to the normal ingestion path below so this
+                # message gets its own tracking ID instead of vanishing.
+                await _send_telegram_message(
+                    chat_id,
+                    f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
+                    "it's saved without one. Treating this message as a new report...",
+                    bot_token
+                )
+        except Exception as e:
+            # This whole block used to be unguarded -- any failure here
+            # (a DB error, resolve_location throwing, anything) propagated
+            # past webhooks.py's own try/except, which only logs and
+            # returns 200 to Telegram, leaving the citizen with *no reply
+            # at all*. Reproduced live: a message sent right after this
+            # exact flow got total silence, not even the generic error
+            # message every other path already had.
+            logger.error(f"Error resolving pending location intake: {e}")
+            await db.rollback()
+            await _send_telegram_message(chat_id, "Sorry, there was an error processing your report. Please try again later.", bot_token)
+            return
 
     if not text and not audio_bytes:
         await _send_telegram_message(chat_id, "Please send a text message, a voice note, or a photo describing the infrastructure issue.", bot_token)

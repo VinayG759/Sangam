@@ -110,46 +110,57 @@ async def handle_whatsapp_update(payload: Dict[str, Any], db: AsyncSession) -> N
     pending = db_result.scalar_one_or_none()
 
     if pending and pending.awaiting == "location" and text:
-        region = await resolve_location(
-            text,
-            pack_loader.load_active_pack().country_code,
-            db
-        )
-        report_id = pending.partial_report.get("report_id")
-
-        # We always delete the pending state after one try
-        await db.delete(pending)
-
-        if region and report_id:
-            await db.execute(
-                update(CitizenReport)
-                .where(CitizenReport.id == report_id)
-                .values(region_id=region.id)
+        try:
+            region = await resolve_location(
+                text,
+                pack_loader.load_active_pack().country_code,
+                db
             )
-            await db.commit()
+            report_id = pending.partial_report.get("report_id")
 
-            r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
-            r = r_res.scalar_one_or_none()
-            tracking_id = r.tracking_id if r else "Unknown"
+            # We always delete the pending state after one try
+            await db.delete(pending)
 
-            await _send_whatsapp_message(from_number, f"Location updated successfully. Thank you. Tracking ID: {tracking_id}", access_token, phone_number_id)
+            if region and report_id:
+                await db.execute(
+                    update(CitizenReport)
+                    .where(CitizenReport.id == report_id)
+                    .values(region_id=region.id)
+                )
+                await db.commit()
+
+                r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                r = r_res.scalar_one_or_none()
+                tracking_id = r.tracking_id if r else "Unknown"
+
+                await _send_whatsapp_message(from_number, f"Location updated successfully. Thank you. Tracking ID: {tracking_id}", access_token, phone_number_id)
+                return
+            elif report_id:
+                await db.commit()
+                r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                r = r_res.scalar_one_or_none()
+                tracking_id = r.tracking_id if r else "Unknown"
+
+                # See the matching comment in telegram_adapter.py: a reply
+                # that fails to match a known place name is far more often
+                # unrelated new content than a genuine failed location
+                # guess, so it falls through to normal ingestion below
+                # instead of being discarded.
+                await _send_whatsapp_message(
+                    from_number,
+                    f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
+                    "it's saved without one. Treating this message as a new report...",
+                    access_token, phone_number_id
+                )
+        except Exception as e:
+            # This block used to be unguarded -- see the matching fix and
+            # comment in telegram_adapter.py. Any failure here propagated
+            # past webhooks.py's own try/except, which only logs and
+            # returns 200, leaving the citizen with no reply at all.
+            logger.error(f"Error resolving pending location intake: {e}")
+            await db.rollback()
+            await _send_whatsapp_message(from_number, "Sorry, there was an error processing your report. Please try again later.", access_token, phone_number_id)
             return
-        elif report_id:
-            await db.commit()
-            r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
-            r = r_res.scalar_one_or_none()
-            tracking_id = r.tracking_id if r else "Unknown"
-
-            # See the matching comment in telegram_adapter.py: a reply that
-            # fails to match a known place name is far more often unrelated
-            # new content than a genuine failed location guess, so it falls
-            # through to normal ingestion below instead of being discarded.
-            await _send_whatsapp_message(
-                from_number,
-                f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
-                "it's saved without one. Treating this message as a new report...",
-                access_token, phone_number_id
-            )
 
     if not text and not audio_bytes:
         await _send_whatsapp_message(from_number, "Please send a text message, a voice note, or a photo describing the infrastructure issue.", access_token, phone_number_id)
