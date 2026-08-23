@@ -53,11 +53,14 @@ def seed_data():
         db.query(NarrativeBrief).delete()
         db.query(EvidenceBundle).delete()
         db.query(Priority).delete()
+        # citizen_reports.cluster_id references issue_clusters -- must clear
+        # before issue_clusters, not after (caught live: this order used to
+        # put IssueCluster first and hit citizen_reports_cluster_id_fkey).
+        db.query(CitizenReport).delete()
         db.query(IssueCluster).delete()
         db.query(AnalysisRun).delete()
         db.query(Indicator).delete()
         db.query(Expenditure).delete()
-        db.query(CitizenReport).delete()
         db.query(AdminRegion).delete()
         db.commit()
 

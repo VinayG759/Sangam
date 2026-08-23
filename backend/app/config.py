@@ -29,10 +29,14 @@ class Settings(BaseSettings):
     GEMINI_EMBEDDING_DIM: int = 768
 
     # Country Pack Directory & Selection.
-    # Resolved against the repository root, not the working directory: the app
-    # runs from /app inside Docker and from backend/ under pytest, so a relative
-    # "packs" path silently fails to resolve in both.
-    PACKS_DIR: str = str(Path(__file__).resolve().parents[2] / "packs")
+    # Resolved against backend/ (packs/ lives inside it, at backend/packs),
+    # not the working directory: the app runs from /workspace inside Docker
+    # and from backend/ under pytest, so a relative "packs" path silently
+    # fails to resolve in both. parents[1] is backend/ in both cases --
+    # config.py is always at <backend>/app/config.py, whether <backend> is
+    # /workspace (Docker, WORKDIR flattens backend/'s contents into it) or
+    # <repo>/backend (local/pytest).
+    PACKS_DIR: str = str(Path(__file__).resolve().parents[1] / "packs")
     ACTIVE_COUNTRY_PACK: str = "india_karnataka"
     
     model_config = SettingsConfigDict(

@@ -39,8 +39,10 @@ from app.utils.real_data_mapping import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-PACK_DIR = REPO_ROOT / "packs" / "india"
+# parents[2] is backend/ (this file is always <backend>/app/utils/load_real_data.py) --
+# see the matching note in app/config.py's PACKS_DIR for why backend/, not repo root.
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+PACK_DIR = BACKEND_ROOT / "packs" / "india"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
