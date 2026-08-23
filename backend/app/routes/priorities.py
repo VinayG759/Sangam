@@ -142,7 +142,7 @@ async def run_simulation(req: SimulationRequest, db: AsyncSession = Depends(get_
             select(Priority)
             .where(Priority.run_id == run_id)
             .options(
-                selectinload(Priority.cluster),
+                selectinload(Priority.cluster).selectinload(IssueCluster.region),
                 selectinload(Priority.evidence_bundle)
             )
         )
@@ -159,11 +159,27 @@ async def run_simulation(req: SimulationRequest, db: AsyncSession = Depends(get_
             if eb:
                 cost_gap = eb.data.get("estimated_cost", cost_gap)
                 allocated_budget = eb.data.get("allocated_budget", 0.0)
-                vulnerability = eb.data.get("vulnerability_index", 0.5)
+                # dict.get(key, default) only falls back when the key is
+                # absent -- Phase 19 made the evidence bundle store an
+                # explicit vulnerability_index: null when no real indicator
+                # exists (so "no data" isn't shown as a fake 0.5), so the
+                # key IS present here and .get() returns that None straight
+                # through, which simulation_engine.py's float() then rejects.
+                vuln = eb.data.get("vulnerability_index")
+                vulnerability = vuln if vuln is not None else 0.5
 
+            # cluster.title is a generic auto-generated label -- "Cluster of
+            # 5 water reports" -- shared by the format string across every
+            # cluster of the same sector and size, so two different real
+            # places (e.g. Hiriyur vs. Indiranagar) render as visually
+            # identical truncated text in the simulator's chart and table.
+            # The region name is what actually distinguishes one from
+            # another; sector is already shown as its own table column and
+            # as the bar's color, so it isn't repeated in the title itself.
+            region_name = cluster.region.name if cluster.region else "Unknown region"
             sim_input.append({
                 "cluster_id": cluster.id,
-                "title": cluster.title,
+                "title": region_name,
                 "sector": cluster.sector,
                 "score": p.score,
                 "reports_count": cluster.report_count,

@@ -115,7 +115,10 @@ async def get_report_detail(report_id: int, db: AsyncSession = Depends(get_db)):
     return {
         "id": r.id,
         "raw_text": r.raw_text,
-        "translated_text": r.english_translation,
+        # pii_redacted_text preferred -- english_translation is Gemini's
+        # full, unredacted translation and this route had no safe fallback
+        # at all, unlike the list route just above it.
+        "translated_text": r.pii_redacted_text or r.english_translation,
         "sector": r.sector,
         "specific_issue": r.specific_issue,
         "urgency_score": r.urgency_score,

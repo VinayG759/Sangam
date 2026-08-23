@@ -1,4 +1,5 @@
 import type { PackInfo } from '@/api'
+import { LayoutGridIcon, ListRankedIcon, SlidersIcon, FileTextIcon } from '@/components/icons'
 
 interface HeaderProps {
   pack: PackInfo | null;
@@ -7,10 +8,10 @@ interface HeaderProps {
 }
 
 const tabs = [
-  { id: 'overview',   label: 'Overview',  icon: '◈' },
-  { id: 'priorities', label: 'Priorities', icon: '⬆' },
-  { id: 'budget',     label: 'Budget Sim', icon: '◎' },
-  { id: 'reports',    label: 'Reports',    icon: '❯' },
+  { id: 'overview',   label: 'Overview',   icon: <LayoutGridIcon /> },
+  { id: 'priorities', label: 'Priorities', icon: <ListRankedIcon /> },
+  { id: 'budget',     label: 'Budget Sim', icon: <SlidersIcon /> },
+  { id: 'reports',    label: 'Reports',    icon: <FileTextIcon /> },
 ]
 
 export default function Header({ pack, activeTab, onTabChange }: HeaderProps) {
@@ -53,7 +54,7 @@ export default function Header({ pack, activeTab, onTabChange }: HeaderProps) {
               className={`tab-btn${activeTab === tab.id ? ' active' : ''}`}
               onClick={() => onTabChange(tab.id)}
             >
-              <span style={{ fontSize: 12 }}>{tab.icon}</span>
+              <span style={{ display: 'inline-flex' }}>{tab.icon}</span>
               {tab.label}
             </button>
           ))}
@@ -68,7 +69,6 @@ export default function Header({ pack, activeTab, onTabChange }: HeaderProps) {
             fontSize: 11, color: 'var(--text-muted)',
             flexShrink: 0,
           }}>
-            <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>●</span>
             {pack.country_code} · {pack.sectors.length} sectors
           </div>
         )}

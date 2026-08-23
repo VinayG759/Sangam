@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 interface MetricCardProps {
   label: string;
   value: number | string;
   sub?: string;
-  icon: string;
+  icon: ReactNode;
   color?: string;
   format?: 'number' | 'currency' | 'raw';
   delay?: number;
@@ -64,7 +64,7 @@ export default function MetricCard({ label, value, sub, icon, color = 'var(--acc
           background: `${color}20`,
           border: `1px solid ${color}30`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18,
+          color,
         }}>
           {icon}
         </div>

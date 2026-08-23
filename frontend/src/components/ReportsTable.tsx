@@ -133,15 +133,38 @@ export default function ReportsTable({ pack }: ReportsTableProps) {
                     background: 'var(--bg-input)',
                     display: 'flex', flexDirection: 'column', gap: 10,
                   }}>
-                    {r.raw_text !== r.english_translation && (
+                    {/* raw_text is deliberately overwritten with the literal
+                        string "Redacted" once PII redaction succeeds -- the
+                        normal case for nearly every report. Showing that as
+                        an "Original Text" section said the same generic
+                        sentence on every single row with nothing row-specific
+                        to learn from it. Only worth surfacing when raw_text
+                        survived as a genuine fallback -- i.e. redaction (or
+                        Gemini itself) failed for this particular report --
+                        since that's the one case where it's actually telling
+                        you something: this report didn't go through the
+                        normal safe path. */}
+                    {r.raw_text && r.raw_text !== r.english_translation && r.raw_text !== 'Redacted' && (
                       <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Original Text</div>
+                        <div style={{ fontSize: 10, color: 'var(--accent-amber)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          ⚠ Original Text (redaction fallback)
+                        </div>
                         <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>{r.raw_text}</div>
                       </div>
                     )}
                     <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>English Translation</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>{r.english_translation}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        English Translation
+                        {r.pii_redacted_text && r.pii_redacted_text !== r.english_translation && (
+                          <span style={{ color: 'var(--accent-amber)', marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>(PII redacted)</span>
+                        )}
+                      </div>
+                      {/* Prefer the PII-redacted version -- english_translation is
+                          Gemini's full, unredacted translation and must never be
+                          the primary thing shown here; it previously was, which
+                          meant any real name/phone/address a citizen included
+                          would have displayed here in the clear. */}
+                      <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>{r.pii_redacted_text || r.english_translation}</div>
                     </div>
                     {r.reported_at && (
                       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>

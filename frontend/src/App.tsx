@@ -5,6 +5,7 @@ import { api, type OverviewData, type Priority, type PackInfo, type Cluster } fr
 
 import Header          from '@/components/Header'
 import MetricCard      from '@/components/MetricCard'
+import { InboxIcon, AlertCircleIcon, PauseCircleIcon, WalletIcon, LandmarkIcon } from '@/components/icons'
 import SectorChart     from '@/components/SectorChart'
 import ClusterMap      from '@/components/ClusterMap'
 import PriorityList    from '@/components/PriorityList'
@@ -103,11 +104,11 @@ export default function App() {
                   ))
                 ) : overview ? (
                   <>
-                    <MetricCard label="Citizen Reports"    value={overview.total_citizen_reports}      icon="📨" color="var(--accent-blue)"    delay={0} />
-                    <MetricCard label="Unserved Gaps"      value={overview.unserved_gaps_count}         icon="🔴" color="var(--verdict-unserved)" delay={60} />
-                    <MetricCard label="Stalled Projects"   value={overview.stalled_projects_count}      icon="⏸️" color="var(--verdict-stalled)"  delay={120} />
-                    <MetricCard label="Stalled Capital"    value={overview.stalled_capital_amount}      icon="💰" color="var(--accent-amber)"    format="currency" delay={180} />
-                    <MetricCard label="Total Expenditure"  value={overview.total_sanctioned_expenditure}icon="🏛️" color="var(--accent-emerald)"  format="currency" delay={240} />
+                    <MetricCard label="Citizen Reports"    value={overview.total_citizen_reports}      icon={<InboxIcon />}       color="var(--accent-blue)"    delay={0} />
+                    <MetricCard label="Unserved Gaps"      value={overview.unserved_gaps_count}         icon={<AlertCircleIcon />} color="var(--verdict-unserved)" delay={60} />
+                    <MetricCard label="Stalled Projects"   value={overview.stalled_projects_count}      icon={<PauseCircleIcon />} color="var(--verdict-stalled)"  delay={120} />
+                    <MetricCard label="Stalled Capital"    value={overview.stalled_capital_amount}      icon={<WalletIcon />}      color="var(--accent-amber)"    format="currency" delay={180} />
+                    <MetricCard label="Total Expenditure"  value={overview.total_sanctioned_expenditure}icon={<LandmarkIcon />}    color="var(--accent-emerald)"  format="currency" delay={240} />
                   </>
                 ) : null}
               </div>
@@ -130,7 +131,13 @@ export default function App() {
                       {clusters.length} clusters
                     </span>
                   </div>
-                  <ClusterMap clusters={clusters} />
+                  <ClusterMap
+                    clusters={clusters}
+                    onViewDetails={priorityId => {
+                      const match = priorities.find(p => p.id === priorityId)
+                      if (match) { setSelected(match); setTab('priorities') }
+                    }}
+                  />
                 </div>
               </div>
 

@@ -76,7 +76,18 @@ class GeminiService:
                     temperature=0.1
                 )
             )
-            return json.loads(response.text)
+            # response_schema constrains the model's output; it does not
+            # guarantee it. A real response (Kannada input, report id 20 in
+            # the local DB) came back with pii_redacted_text missing/null
+            # despite every other field being fine -- this went straight
+            # into the database as a null redacted-text column because
+            # nothing here checked the parsed JSON against the schema it
+            # was already importing and passing to the API. Validating
+            # catches that class of partial response the same way a full
+            # API failure is already caught below, rather than silently
+            # trusting whatever came back.
+            validated = CitizenReportAnalysis.model_validate_json(response.text)
+            return validated.model_dump()
         except Exception as e:
             logger.error(f"Error calling Gemini analyze_citizen_report: {e}")
             # Fallback basic schema on failure
@@ -142,7 +153,13 @@ class GeminiService:
                     temperature=0.1
                 )
             )
-            return json.loads(response.text)
+            # Same gap as analyze_citizen_report above -- unvalidated, this
+            # is worse here: clustering_engine.py reads the result with
+            # plain dict indexing (brief_data['summary']), so a response
+            # missing a field wouldn't just pass bad data through, it would
+            # raise KeyError and crash the whole clustering run.
+            validated = PolicyBrief.model_validate_json(response.text)
+            return validated.model_dump()
         except Exception as e:
             logger.error(f"Error calling Gemini generate_policy_brief: {e}")
             return {

@@ -165,7 +165,9 @@ async def get_cluster_detail(cluster_id: int, db: AsyncSession = Depends(get_db)
         "reports": [
             {
                 "id": r.id,
-                "english_translation": r.english_translation,
+                # pii_redacted_text preferred -- english_translation is
+                # Gemini's full, unredacted translation.
+                "english_translation": r.pii_redacted_text or r.english_translation,
                 "sector": r.sector,
                 "urgency_score": r.urgency_score,
                 "sentiment": r.sentiment,

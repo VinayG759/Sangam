@@ -403,7 +403,14 @@ class ClusteringEngine:
                         {"title": e.title, "amount": e.amount, "status": e.status}
                         for e in expenditures
                     ],
-                    "citizen_quotes": [r.english_translation for r in reports[:3]]
+                    # pii_redacted_text, not english_translation -- the evidence
+                    # bundle is persisted, shown directly in the frontend's
+                    # evidence drawer, and fed into Gemini's Call 3 as source
+                    # material for the policy brief. english_translation is
+                    # Gemini's full, unredacted translation; quoting it here
+                    # would let a citizen's name/phone/address flow straight
+                    # into a document a policymaker reads and an AI model cites.
+                    "citizen_quotes": [r.pii_redacted_text or r.english_translation for r in reports[:3]]
                 }
 
                 eb = EvidenceBundle(

@@ -13,6 +13,13 @@ const SECTOR_COLORS: Record<string, string> = {
   health:      '#fb7185', education: '#fbbf24', electricity: '#60a5fa',
 }
 
+// The chart has no separate legend for what each bar's color means (unlike
+// the map), so a sector icon prefix on the label carries that info inline.
+const SECTOR_ICONS: Record<string, string> = {
+  water: '💧', roads: '🛣️', sanitation: '♻️',
+  health: '🏥', education: '🏫', electricity: '⚡', other: '📋',
+}
+
 function croreLabel(n: number) {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)} Cr`;
   if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`;
@@ -58,12 +65,21 @@ export default function BudgetSimulator() {
   }
 
   const chartData = result?.allocations.map(a => ({
-    name: a.title.length > 20 ? a.title.slice(0, 20) + '…' : a.title,
+    name: `${SECTOR_ICONS[a.sector] ?? SECTOR_ICONS.other} ${a.title}`,
     value: a.allocated_amount,
     sector: a.sector,
     pct_funded: a.pct_funded,
     status: a.status,
   })) ?? []
+
+  // A per-label computed width (character count * average glyph width)
+  // looked reasonable but was unreliable in practice -- emoji don't render
+  // at a consistent width relative to regular characters, so Recharts'
+  // own internal label-fit check (which measures actual rendered text,
+  // not an estimate) still wrapped some labels and not others of similar
+  // apparent length. A comfortably generous fixed width sidesteps that --
+  // region names in this dataset top out around "Koramangala Ward".
+  const yAxisWidth = 190
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -163,7 +179,7 @@ export default function BudgetSimulator() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} layout="vertical" barSize={14}>
                     <XAxis type="number" tickFormatter={v => croreLabel(v as number)} tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" width={yAxisWidth} tick={{ fontSize: 11 }} />
                     <Tooltip content={<SimTooltip />} />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                       {chartData.map((entry, i) => (
