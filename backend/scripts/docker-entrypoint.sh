@@ -25,13 +25,17 @@ RETRIES=0
 while [ $RETRIES -lt $MAX_RETRIES ]; do
     if python -c "
 from sqlalchemy import create_engine, text
-import os
+import os, sys
 url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/sangam')
-engine = create_engine(url)
-with engine.connect() as conn:
-    conn.execute(text('SELECT 1'))
-print('OK')
-" 2>/dev/null; then
+try:
+    engine = create_engine(url, connect_args={'connect_timeout': 10})
+    with engine.connect() as conn:
+        conn.execute(text('SELECT 1'))
+    print('OK')
+except Exception as e:
+    print(f'[entrypoint] DB connection error: {type(e).__name__}: {e}', file=sys.stderr)
+    sys.exit(1)
+"; then
         echo "[entrypoint] Database is ready."
         break
     fi
