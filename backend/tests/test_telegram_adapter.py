@@ -100,6 +100,97 @@ async def test_handle_telegram_update_start_command_is_not_ingested(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_photo_reply_during_pending_location_is_not_silently_bypassed(monkeypatch):
+    # Reproduced live: a message with no `text` (voice/photo) used to skip
+    # the pending-location check entirely (it required `and text`), so the
+    # old pending row was never cleared -- it then collided with a new
+    # PendingIntake insert for the next report needing a location, crashing
+    # on PendingIntake's channel_user_hash primary key.
+    import app.services.telegram_adapter as telegram_module
+    from app.models.models import PendingIntake, CitizenReport
+
+    pending = PendingIntake(
+        channel_user_hash="irrelevant",
+        awaiting="location",
+        partial_report={"report_id": 42},
+        expires_at=telegram_module.datetime(2999, 1, 1),
+    )
+    old_report = MagicMock(spec=CitizenReport)
+    old_report.tracking_id = "SNG-OLD1"
+
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.delete = AsyncMock()
+
+    pending_lookup = MagicMock()
+    pending_lookup.scalar_one_or_none.return_value = pending
+    old_report_lookup = MagicMock()
+    old_report_lookup.scalar_one_or_none.return_value = old_report
+    mock_session.execute.side_effect = [pending_lookup, old_report_lookup]
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test_bot_token")
+    mock_resolve = AsyncMock(return_value=None)
+    monkeypatch.setattr(telegram_module, "resolve_location", mock_resolve)
+
+    mock_ingest = AsyncMock(return_value={"tracking_id": "SNG-NEW2"})
+    monkeypatch.setattr(telegram_module, "ingest_citizen_message", mock_ingest)
+    mock_send = AsyncMock()
+    monkeypatch.setattr(telegram_module, "_send_telegram_message", mock_send)
+
+    update_payload = {
+        "message": {
+            "chat": {"id": 123456},
+            "photo": [{"file_id": "high_res_file", "file_size": 5000}],
+        }
+    }
+
+    class MockResponse:
+        def __init__(self, json_data=None, bytes_data=None):
+            self.status = 200
+            self.json_data = json_data
+            self.bytes_data = bytes_data
+        async def json(self):
+            return self.json_data
+        async def read(self):
+            return self.bytes_data
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+
+    class MockClientSession:
+        def get(self, url):
+            if "getFile" in url:
+                return MockResponse(json_data={"result": {"file_path": "photos/x.jpg"}})
+            return MockResponse(bytes_data=b"fake_image_bytes")
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+
+    import aiohttp
+    monkeypatch.setattr(aiohttp, "ClientSession", MockClientSession)
+
+    await handle_telegram_update(update_payload, mock_session)
+
+    # resolve_location must never be called with no text to check.
+    mock_resolve.assert_not_called()
+    # The photo must still reach ingestion as its own new report, not be
+    # dropped or crash on the still-pending old one.
+    mock_ingest.assert_called_once_with(
+        db=mock_session,
+        text=None,
+        audio_bytes=b"fake_image_bytes",
+        mime_type="image/jpeg",
+        channel="telegram",
+        channel_user_id="123456",
+    )
+    assert mock_send.call_count == 2
+    assert "SNG-OLD1" in mock_send.call_args_list[0][0][1]
+    assert "SNG-NEW2" in mock_send.call_args_list[1][0][1]
+
+
+@pytest.mark.asyncio
 async def test_pending_location_reply_that_crashes_still_gets_a_reply(monkeypatch):
     # Reproduced live: a citizen sent a message right after a location
     # prompt and got total silence -- an exception in this block used to

@@ -103,14 +103,22 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
     db_result = await db.execute(stmt)
     pending = db_result.scalar_one_or_none()
     
-    if pending and pending.awaiting == "location" and text:
+    if pending and pending.awaiting == "location":
         try:
-            # Resolve location
+            # A voice note or photo has no `text` to attempt as a location
+            # guess -- resolve_location can't fuzzy-match audio bytes.
+            # Previously this whole block required `and text`, so a
+            # voice/photo reply silently bypassed the pending question
+            # entirely rather than resolving or declining it (reproduced
+            # live: the old pending row was still sitting there when the
+            # next report also needed a location, colliding on
+            # PendingIntake's channel_user_hash primary key). Treat "no
+            # text to try" the same as "tried and failed to match".
             region = await resolve_location(
                 text,
                 pack_loader.load_active_pack().country_code,
                 db
-            )
+            ) if text else None
             report_id = pending.partial_report.get("report_id")
 
             # We always delete the pending state after one try

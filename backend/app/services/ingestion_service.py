@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models.models import CitizenReport, PendingIntake
 from app.services.gemini_service import gemini_service
 from app.utils.hashing import hash_channel_user
@@ -109,14 +110,32 @@ async def ingest_citizen_message(
         await db.flush()
         
         if needs_location_followup:
-            pending = PendingIntake(
+            # channel_user_hash is PendingIntake's primary key -- one
+            # pending conversation per user at a time. A plain insert
+            # crashes with a UniqueViolationError if this same user still
+            # has an earlier, unanswered location question outstanding
+            # (reproduced live: a voice note that itself needed a location
+            # follow-up collided with one from a still-unresolved text
+            # report). Upsert instead: the newest report needing a
+            # location supersedes an older, presumably-forgotten one --
+            # only one pending question can be tracked per user regardless,
+            # so the most recent context is the more useful one to keep.
+            upsert_stmt = pg_insert(PendingIntake).values(
                 channel_user_hash=reporter_hash,
                 channel=channel,
                 partial_report={"report_id": report.id, "analysis": analysis},
                 awaiting="location",
                 expires_at=datetime.utcnow() + timedelta(hours=1)
+            ).on_conflict_do_update(
+                index_elements=[PendingIntake.channel_user_hash],
+                set_={
+                    "channel": channel,
+                    "partial_report": {"report_id": report.id, "analysis": analysis},
+                    "awaiting": "location",
+                    "expires_at": datetime.utcnow() + timedelta(hours=1)
+                }
             )
-            db.add(pending)
+            await db.execute(upsert_stmt)
             await db.flush()
 
         # Fire-and-forget: the dashboard (overview/priorities/clusters)

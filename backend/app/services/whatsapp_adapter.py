@@ -109,13 +109,18 @@ async def handle_whatsapp_update(payload: Dict[str, Any], db: AsyncSession) -> N
     db_result = await db.execute(stmt)
     pending = db_result.scalar_one_or_none()
 
-    if pending and pending.awaiting == "location" and text:
+    if pending and pending.awaiting == "location":
         try:
+            # See the matching comment in telegram_adapter.py: a voice note
+            # or image has no `text` to attempt as a location guess, so
+            # this used to bypass the pending question entirely rather
+            # than resolving or declining it -- leaving it to collide with
+            # a later report on PendingIntake's primary key.
             region = await resolve_location(
                 text,
                 pack_loader.load_active_pack().country_code,
                 db
-            )
+            ) if text else None
             report_id = pending.partial_report.get("report_id")
 
             # We always delete the pending state after one try

@@ -159,3 +159,59 @@ async def test_ingest_citizen_message_gemini_failure_degrades_gracefully(monkeyp
     assert added_report.english_translation is None
     assert added_report.sector == "unknown"
 
+
+@pytest.mark.asyncio
+async def test_needs_location_followup_upserts_pending_intake(monkeypatch):
+    # channel_user_hash is PendingIntake's primary key -- a plain insert
+    # crashes with a UniqueViolationError if this user already has an
+    # earlier, unanswered location question outstanding (reproduced live:
+    # a voice note that itself needed a location follow-up collided with
+    # one from a still-unresolved text report). Must be an upsert instead.
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.execute.return_value.scalar_one_or_none.return_value = None
+
+    class MockGeminiService:
+        def analyze_citizen_report(self, text_content, audio_bytes, mime_type):
+            return {
+                "original_language": "en",
+                "english_translation": text_content,
+                "sector": "roads",
+                "specific_issue": "pothole",
+                "urgency_score": 3.0,
+                "sentiment": "negative",
+                "location_text_latin": "Some Unknown Place",
+                "pii_redacted_text": text_content,
+            }
+
+        def get_embedding(self, text):
+            return [0.1] * 768
+
+    import app.services.ingestion_service as ingestion_module
+    monkeypatch.setattr(ingestion_module, "gemini_service", MockGeminiService())
+    # Force the "couldn't resolve a location" branch regardless of what
+    # regions exist in whatever DB this suite happens to run against.
+    monkeypatch.setattr(ingestion_module, "resolve_location", AsyncMock(return_value=None))
+
+    result = await ingest_citizen_message(
+        db=mock_session,
+        text="Potholes somewhere unspecified",
+        channel="telegram",
+        channel_user_id="user_123",
+    )
+
+    assert result["needs_location_followup"] is True
+
+    # Find the PendingIntake upsert among the execute() calls (the
+    # CitizenReport insert itself goes through db.add(), not execute()).
+    upsert_call = None
+    for call in mock_session.execute.call_args_list:
+        stmt = call[0][0]
+        if "pending_intake" in str(stmt).lower():
+            upsert_call = stmt
+            break
+
+    assert upsert_call is not None, "expected a statement touching pending_intake"
+    compiled = str(upsert_call.compile(dialect=__import__("sqlalchemy.dialects.postgresql", fromlist=["dialect"]).dialect()))
+    assert "ON CONFLICT" in compiled.upper()
+
