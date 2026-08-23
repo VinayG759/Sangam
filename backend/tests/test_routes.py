@@ -569,86 +569,101 @@ class TestIngestionRoute:
 
 class TestWhatsAppWebhookRoute:
     """
-    Covers app/routes/webhooks.py's external-URL reconstruction: Twilio signs
-    the public URL it actually called, but behind a reverse proxy or PaaS
-    (Render, Railway, ...) that terminates TLS and forwards internally as
-    plain HTTP, request.url reports the internal scheme/host -- a naive
-    comparison would reject every real request. The route rebuilds the
-    external URL from X-Forwarded-Proto/X-Forwarded-Host before verifying.
+    Covers app/routes/webhooks.py's Meta WhatsApp Cloud API integration:
+    the GET verification handshake Meta performs once when the webhook URL
+    is configured in the App dashboard, and the X-Hub-Signature-256 check
+    on inbound POSTs (HMAC-SHA256 of the raw body -- unlike Twilio's
+    URL-based scheme, no reverse-proxy header reconstruction is needed).
     """
 
-    def _sign(self, url, params, auth_token):
-        import hmac, hashlib, base64
-        data = url
-        for k, v in sorted(params.items()):
-            data += f"{k}{v}"
-        mac = hmac.new(auth_token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1)
-        return base64.b64encode(mac.digest()).decode("utf-8")
+    def _sign(self, body: bytes, app_secret: str) -> str:
+        import hmac, hashlib
+        mac = hmac.new(app_secret.encode("utf-8"), body, hashlib.sha256)
+        return "sha256=" + mac.hexdigest()
 
-    def test_valid_signature_behind_a_proxy_is_accepted(self, client, monkeypatch):
-        monkeypatch.setenv("TWILIO_AUTH_TOKEN", "test_token")
+    def test_verify_handshake_with_correct_token_returns_challenge(self, client, monkeypatch):
+        monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "test_verify_token")
 
-        form = {"From": "whatsapp:+1234567890", "Body": "Test", "NumMedia": "0"}
-        # Twilio signed the *external* URL -- https on the real domain --
-        # not the internal http://testserver TestClient uses.
-        external_url = "https://sangam.example.com/api/v1/webhooks/whatsapp"
-        signature = self._sign(external_url, form, "test_token")
+        response = client.get(
+            "/api/v1/webhooks/whatsapp",
+            params={"hub.mode": "subscribe", "hub.verify_token": "test_verify_token", "hub.challenge": "12345"},
+        )
+
+        assert response.status_code == 200
+        assert response.text == "12345"
+
+    def test_verify_handshake_with_wrong_token_is_rejected(self, client, monkeypatch):
+        monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "test_verify_token")
+
+        response = client.get(
+            "/api/v1/webhooks/whatsapp",
+            params={"hub.mode": "subscribe", "hub.verify_token": "wrong_token", "hub.challenge": "12345"},
+        )
+
+        assert response.status_code == 403
+
+    def test_valid_signature_is_accepted(self, client, monkeypatch):
+        monkeypatch.setenv("WHATSAPP_APP_SECRET", "test_app_secret")
+
+        body = b'{"entry":[{"changes":[{"value":{"messages":[]}}]}]}'
+        signature = self._sign(body, "test_app_secret")
 
         with patch("app.routes.webhooks.handle_whatsapp_update", new_callable=AsyncMock) as mock_handle:
             response = client.post(
                 "/api/v1/webhooks/whatsapp",
-                data=form,
-                headers={
-                    "X-Twilio-Signature": signature,
-                    "X-Forwarded-Proto": "https",
-                    "X-Forwarded-Host": "sangam.example.com",
-                },
+                content=body,
+                headers={"X-Hub-Signature-256": signature, "Content-Type": "application/json"},
             )
 
         assert response.status_code == 200
         mock_handle.assert_called_once()
 
-    def test_signature_signed_for_wrong_host_is_rejected(self, client, monkeypatch):
-        monkeypatch.setenv("TWILIO_AUTH_TOKEN", "test_token")
+    def test_signature_with_wrong_secret_is_rejected(self, client, monkeypatch):
+        monkeypatch.setenv("WHATSAPP_APP_SECRET", "test_app_secret")
 
-        form = {"From": "whatsapp:+1234567890", "Body": "Test", "NumMedia": "0"}
-        # Signed for a different host than the one in the forwarded headers below.
-        signature = self._sign("https://someone-elses-domain.com/api/v1/webhooks/whatsapp", form, "test_token")
+        body = b'{"entry":[]}'
+        signature = self._sign(body, "wrong_secret")
 
         with patch("app.routes.webhooks.handle_whatsapp_update", new_callable=AsyncMock) as mock_handle:
             response = client.post(
                 "/api/v1/webhooks/whatsapp",
-                data=form,
-                headers={
-                    "X-Twilio-Signature": signature,
-                    "X-Forwarded-Proto": "https",
-                    "X-Forwarded-Host": "sangam.example.com",
-                },
+                content=body,
+                headers={"X-Hub-Signature-256": signature, "Content-Type": "application/json"},
             )
 
         assert response.status_code == 403
         mock_handle.assert_not_called()
 
-    def test_signature_computed_against_raw_internal_url_is_rejected(self, client, monkeypatch):
-        # Proves the fix matters: a signature computed against the internal
-        # http://testserver URL (what request.url would report with no
-        # forwarded headers) must NOT validate once forwarded headers claim
-        # a different external host -- otherwise the reconstruction could be
-        # trivially bypassed by omitting the headers.
-        monkeypatch.setenv("TWILIO_AUTH_TOKEN", "test_token")
+    def test_tampered_body_is_rejected(self, client, monkeypatch):
+        # Proves the signature actually covers the body: a signature valid
+        # for one payload must not validate a different one sent instead.
+        monkeypatch.setenv("WHATSAPP_APP_SECRET", "test_app_secret")
 
-        form = {"From": "whatsapp:+1234567890", "Body": "Test", "NumMedia": "0"}
-        signature = self._sign("http://testserver/api/v1/webhooks/whatsapp", form, "test_token")
+        signature = self._sign(b'{"entry":[]}', "test_app_secret")
 
         with patch("app.routes.webhooks.handle_whatsapp_update", new_callable=AsyncMock) as mock_handle:
             response = client.post(
                 "/api/v1/webhooks/whatsapp",
-                data=form,
-                headers={
-                    "X-Twilio-Signature": signature,
-                    "X-Forwarded-Proto": "https",
-                    "X-Forwarded-Host": "sangam.example.com",
-                },
+                content=b'{"entry":["tampered"]}',
+                headers={"X-Hub-Signature-256": signature, "Content-Type": "application/json"},
+            )
+
+        assert response.status_code == 403
+        mock_handle.assert_not_called()
+
+    def test_missing_app_secret_rejects_everything(self, client, monkeypatch):
+        # No WHATSAPP_APP_SECRET configured must fail closed, not open --
+        # matches the original Twilio adapter's behavior when its auth
+        # token was unset.
+        monkeypatch.delenv("WHATSAPP_APP_SECRET", raising=False)
+
+        body = b'{"entry":[]}'
+
+        with patch("app.routes.webhooks.handle_whatsapp_update", new_callable=AsyncMock) as mock_handle:
+            response = client.post(
+                "/api/v1/webhooks/whatsapp",
+                content=body,
+                headers={"X-Hub-Signature-256": "sha256=anything", "Content-Type": "application/json"},
             )
 
         assert response.status_code == 403
