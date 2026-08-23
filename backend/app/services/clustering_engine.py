@@ -1,13 +1,23 @@
 import logging
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
-from app.models.models import CitizenReport, Expenditure, AdminRegion, IssueCluster, Priority, EvidenceBundle, NarrativeBrief, Indicator
+from app.models.models import CitizenReport, Expenditure, AdminRegion, IssueCluster, Priority, EvidenceBundle, NarrativeBrief, Indicator, AnalysisRun
 from app.services.scoring_engine import scoring_engine
 from app.services.gemini_service import gemini_service
 from app.services.verifier import verification_engine
 import json
 
 logger = logging.getLogger(__name__)
+
+# Sector -> the delivery-rate indicator_key that stands in for expenditure
+# data when no Expenditure rows exist at all (Phase 13,
+# docs/IMPLEMENTATION_PLAN.md). Real Karnataka data only carries this for
+# water (docs/DECISIONS.md #1/#2 -- the pack deliberately went deep on one
+# sector rather than wide across six); a sector with no entry here simply
+# never triggers DELIVERY_GAP and falls through to the existing behavior.
+SECTOR_DELIVERY_INDICATOR = {
+    "water": "water.piped_household_pct",
+}
 
 class ClusteringEngine:
     """
@@ -19,14 +29,92 @@ class ClusteringEngine:
     def process_and_prioritize(db: Session) -> None:
         logger.info("Starting spatial and semantic clustering pipeline...")
         try:
-            # 1. Clear old computed results
-            db.query(NarrativeBrief).delete()
-            db.query(EvidenceBundle).delete()
-            db.query(Priority).delete()
-            db.query(IssueCluster).delete()
-            # Reset report cluster assignments
-            db.execute(text("UPDATE citizen_reports SET cluster_id = NULL;"))
+            # 1. Create a new AnalysisRun
+            run = AnalysisRun(status="running")
+            db.add(run)
             db.commit()
+            db.refresh(run)
+            run_id = run.id
+
+            # Phase 18: Re-attempt Gemini for pending_analysis reports
+            logger.info("Retrying Gemini analysis for pending reports...")
+            pending_reports = db.query(CitizenReport).filter(CitizenReport.status == "pending_analysis").all()
+            for rep in pending_reports:
+                try:
+                    analysis = gemini_service.analyze_citizen_report(
+                        text_content=rep.raw_text,
+                        audio_bytes=None,
+                        mime_type=None
+                    )
+                    english_translation = analysis.get("english_translation") or rep.raw_text or ""
+                    embedding = gemini_service.get_embedding(english_translation)
+                    
+                    rep.english_translation = english_translation
+                    rep.sector = analysis.get("sector", "unknown")
+                    rep.specific_issue = analysis.get("specific_issue", "")
+                    rep.urgency_score = analysis.get("urgency_score", 1.0)
+                    rep.sentiment = analysis.get("sentiment", "neutral")
+                    rep.detected_language = analysis.get("original_language", "unknown")
+                    rep.embedding = embedding
+                    
+                    pii_redacted = analysis.get("pii_redacted_text", "")
+                    if pii_redacted and pii_redacted != "[Audio - Failed to process]" and "Failed to analyze" not in analysis.get("specific_issue", ""):
+                        rep.pii_redacted_text = pii_redacted
+                        rep.raw_text = "Redacted"
+
+                    location_text_latin = analysis.get("location_text_latin", "")
+                    if location_text_latin and not rep.region_id:
+                        from rapidfuzz import process, fuzz
+                        from app.services.pack_loader import pack_loader
+                        query = location_text_latin.strip().lower()
+                        regions = db.query(AdminRegion).filter(AdminRegion.country_code == pack_loader.load_active_pack().country_code).all()
+                        
+                        match_region = None
+                        for r in regions:
+                            if r.name.strip().lower() == query:
+                                match_region = r
+                                break
+                            if r.name_variants:
+                                variants = [v.strip().lower() for v in r.name_variants.split('|')]
+                                if query in variants:
+                                    match_region = r
+                                    break
+                                    
+                        if not match_region:
+                            # Both sides lowercased before scoring -- see the
+                            # matching fix and comment in location_resolver.py;
+                            # this loop duplicates that logic (a sync Session
+                            # here, an AsyncSession there) and had the same bug.
+                            choices = []
+                            region_map = {}
+                            for r in regions:
+                                names_to_match = [r.name]
+                                if r.name_variants:
+                                    names_to_match.extend(r.name_variants.split('|'))
+                                for name in names_to_match:
+                                    clean_name = name.strip()
+                                    if clean_name:
+                                        lowered = clean_name.lower()
+                                        choices.append(lowered)
+                                        region_map[lowered] = r
+
+                            if choices:
+                                match = process.extractOne(query, choices, scorer=fuzz.WRatio)
+                                if match:
+                                    best_str, score, index = match
+                                    if score >= 85:
+                                        match_region = region_map[best_str]
+                                        
+                        if match_region:
+                            rep.region_id = match_region.id
+
+                    rep.status = "complete"
+                    db.add(rep)
+                    db.commit()
+                    logger.info(f"Successfully processed pending report {rep.id}")
+                except Exception as e:
+                    logger.error(f"Failed to process pending report {rep.id}: {e}")
+                    db.rollback()
 
             # 2. Perform Spatial DBSCAN Clustering in PostGIS (eps = ~500m or 0.005 degrees)
             logger.info("Executing spatial clustering...")
@@ -41,6 +129,73 @@ class ClusteringEngine:
             for r_id, c_idx in result:
                 if c_idx is not None:
                     cluster_map.setdefault(c_idx, []).append(r_id)
+
+            # 2b. Reports resolved via the gazetteer (location_resolver.py sets
+            # region_id from a place name) but with no raw GPS point never
+            # enter the spatial DBSCAN query above -- it only looks at rows
+            # WHERE location IS NOT NULL. Left as-is, every citizen who
+            # reports by naming a place instead of sharing GPS (the normal
+            # case for a Telegram/WhatsApp text or voice message) would be
+            # correctly geocoded by Phase 9.3 and then silently vanish from
+            # every cluster, priority, and dashboard entry. Group these by
+            # (region_id, sector) instead -- the same key already used below
+            # to match demand against expenditure records, so a cluster
+            # formed this way still joins correctly with no further changes.
+            next_cluster_idx = (max(cluster_map.keys()) + 1) if cluster_map else 0
+            gazetteer_reports = db.query(CitizenReport).filter(
+                CitizenReport.location.is_(None),
+                CitizenReport.region_id.isnot(None),
+            ).all()
+
+            gazetteer_groups: dict[tuple, list[int]] = {}
+            for r in gazetteer_reports:
+                key = (r.region_id, r.sector)
+                gazetteer_groups.setdefault(key, []).append(r.id)
+
+            for report_ids in gazetteer_groups.values():
+                cluster_map[next_cluster_idx] = report_ids
+                next_cluster_idx += 1
+
+            # Phase 12: Cross-Lingual Semantic Clustering (Split Logic Only)
+            logger.info("Applying semantic split logic...")
+            final_cluster_map = {}
+            for c_idx, report_ids in cluster_map.items():
+                if len(report_ids) < 2:
+                    final_cluster_map[c_idx] = report_ids
+                    continue
+                
+                split_query = text("""
+                    WITH group_reports AS (
+                        SELECT id, embedding
+                        FROM citizen_reports
+                        WHERE id IN :report_ids AND embedding IS NOT NULL
+                    ),
+                    centroid AS (
+                        SELECT avg(embedding) as center
+                        FROM group_reports
+                    )
+                    SELECT g.id, (g.embedding <=> c.center) as distance
+                    FROM group_reports g, centroid c;
+                """)
+                
+                rows = db.execute(split_query, {"report_ids": tuple(report_ids)}).fetchall()
+                
+                dist_map = {row.id: row.distance for row in rows if row.distance is not None}
+                
+                main_cluster_ids = []
+                for r_id in report_ids:
+                    dist = dist_map.get(r_id)
+                    if dist is not None and dist > 0.35:
+                        # Split out due to semantic distance
+                        final_cluster_map[next_cluster_idx] = [r_id]
+                        next_cluster_idx += 1
+                    else:
+                        main_cluster_ids.append(r_id)
+                        
+                if main_cluster_ids:
+                    final_cluster_map[c_idx] = main_cluster_ids
+                    
+            cluster_map = final_cluster_map
 
             # 3. Create Issue Clusters
             for c_idx, report_ids in cluster_map.items():
@@ -60,24 +215,75 @@ class ClusteringEngine:
                 """)
                 centroid_wkt = db.execute(centroid_query, {"ids": tuple(report_ids)}).scalar()
 
-                # Find representing admin region (ward)
-                region_query = text("""
-                    SELECT id FROM admin_regions 
-                    WHERE level = 'ward' 
-                    ORDER BY ST_Distance(geom, ST_Centroid(ST_Collect(
-                        SELECT location FROM citizen_reports WHERE id IN :ids
-                    ))) LIMIT 1;
-                """)
-                # Simple fallback to first ward if geo-search gets complicated
-                region = db.query(AdminRegion).filter(AdminRegion.level == "ward").first()
+                # Find the admin region this cluster actually belongs to.
+                #
+                # The previous query was unreachable: it nested a bare SELECT
+                # inside ST_Collect(...), which is not valid SQL and would
+                # raise if it ever ran. Because it never ran, execution always
+                # fell through to ".filter(level=='ward').first()' -- so every
+                # cluster, in every sector, everywhere in the state, was
+                # attributed to the same single ward. Expenditures are matched
+                # by region_id + sector below, so this did not just mislabel
+                # the map -- it broke the join itself for all but one region.
+                #
+                # Fixed as a real spatial query: prefer the ward whose polygon
+                # contains the cluster centroid, and fall back to the nearest
+                # ward by distance when no polygon contains it (a centroid can
+                # legitimately sit outside every seeded boundary).
+                # clustering_engine.py's region-attribution step now prefers
+                # citizen_reports.region_id when the resolver already set it, and
+                # only falls back to the spatial query for reports that arrived
+                # with a raw GPS point and no resolvable place name.
+                region_ids = [r.region_id for r in reports if r.region_id]
+                region = None
+                
+                if region_ids:
+                    dominant_region_id = max(set(region_ids), key=region_ids.count)
+                    region = db.query(AdminRegion).get(dominant_region_id)
+
+                if region is None and centroid_wkt:
+                    region_query = text("""
+                        SELECT id FROM admin_regions
+                        WHERE level = 'ward' AND geom IS NOT NULL
+                        ORDER BY
+                            ST_Contains(geom, ST_GeomFromText(:centroid, 4326)) DESC,
+                            ST_Distance(geom, ST_GeomFromText(:centroid, 4326)) ASC
+                        LIMIT 1;
+                    """)
+                    row = db.execute(region_query, {"centroid": centroid_wkt}).first()
+                    if row:
+                        region = db.query(AdminRegion).get(row[0])
+
+                if region is None:
+                    logger.warning(
+                        "Cluster %s: no ward geometry matched centroid %r; "
+                        "falling back to the first ward. Region attribution "
+                        "for this cluster is unreliable.", c_idx, centroid_wkt,
+                    )
+                    region = db.query(AdminRegion).filter(AdminRegion.level == "ward").first()
                 region_id = region.id if region else 1
+
+                final_centroid = centroid_wkt
+                is_approximate = False
+                
+                if not final_centroid and region:
+                    if region.centroid is not None:
+                        final_centroid = region.centroid
+                        is_approximate = True
+                    elif region.parent_id is not None:
+                        parent = db.query(AdminRegion).get(region.parent_id)
+                        if parent and parent.centroid is not None:
+                            final_centroid = parent.centroid
+                            is_approximate = True
 
                 cluster = IssueCluster(
                     title=f"Cluster of {len(reports)} {dominant_sector} reports",
                     sector=dominant_sector,
                     region_id=region_id,
-                    centroid=centroid_wkt,
-                    report_count=len(reports)
+                    centroid=final_centroid,
+                    is_approximate_location=is_approximate,
+                    report_count=len(reports),
+                    run_id=run_id
                 )
                 db.add(cluster)
                 db.flush()
@@ -106,12 +312,44 @@ class ClusteringEngine:
                     Indicator.region_id == region_id,
                     Indicator.indicator_key == "vulnerability_index"
                 ).first()
-                vulnerability_val = vuln_ind.numeric_value if vuln_ind else 0.5
+                vulnerability_val = vuln_ind.numeric_value if vuln_ind else None
+
+                # Delivery-rate signal for DELIVERY_GAP (Phase 13): only
+                # meaningful when both this region and its own parent have a
+                # value for the same indicator -- e.g. a block's own % piped
+                # households vs. its district's. Absent for any sector not in
+                # SECTOR_DELIVERY_INDICATOR, or when either row is missing.
+                delivery_rate = None
+                delivery_reference = None
+                delivery_indicator_key = SECTOR_DELIVERY_INDICATOR.get(dominant_sector)
+                if delivery_indicator_key and region and region.parent_id:
+                    region_ind = db.query(Indicator).filter(
+                        Indicator.region_id == region.id,
+                        Indicator.indicator_key == delivery_indicator_key
+                    ).first()
+                    parent_ind = db.query(Indicator).filter(
+                        Indicator.region_id == region.parent_id,
+                        Indicator.indicator_key == delivery_indicator_key
+                    ).first()
+                    if region_ind and parent_ind:
+                        delivery_rate = region_ind.numeric_value
+                        delivery_reference = parent_ind.numeric_value
 
                 # Calculate max reports count in region for normalization
                 max_reports_in_region = db.query(func.max(IssueCluster.report_count)).scalar() or len(reports)
 
-                # 5. Calculate Priority Score & Verdict
+                # Distinct reporters: count each channel identity once, so 500
+                # messages from one person cannot manufacture a hotspot.
+                # reporter_hash is nullable during migration -- reports without
+                # one fall back to being counted individually, same as before,
+                # rather than silently vanishing from the total.
+                distinct_reporters = len({
+                    r.reporter_hash for r in reports if r.reporter_hash
+                } | {
+                    f"unhashed-{r.id}" for r in reports if not r.reporter_hash
+                })
+
+                # Calculate Priority Score & Verdict
                 score_details = scoring_engine.calculate_priority_score(
                     report_count=len(reports),
                     max_reports_in_region=max_reports_in_region,
@@ -119,14 +357,30 @@ class ClusteringEngine:
                     allocated_budget=allocated_budget,
                     estimated_cost=estimated_cost,
                     stalled_status=stalled_status,
-                    average_urgency=avg_urgency
+                    average_urgency=avg_urgency,
+                    distinct_reporters=distinct_reporters,
+                    population=region.population if region else None,
+                    # No pack-wide reference intensity yet -- that needs a
+                    # pass over every cluster in the run, which belongs in the
+                    # nightly batch job, not per-cluster here. Until then the
+                    # scoring engine's documented per-cluster fallback applies.
+                    delivery_rate=delivery_rate,
+                    delivery_reference=delivery_reference,
                 )
+
+                fully_funded = allocated_budget >= estimated_cost
+                if len(reports) < 3 and not stalled_status and not fully_funded:
+                    list_type = "audit"
+                else:
+                    list_type = "fund"
 
                 priority = Priority(
                     cluster_id=cluster.id,
                     score=score_details["score"],
                     verdict=score_details["verdict"],
-                    details=score_details
+                    list=list_type,
+                    details=score_details,
+                    run_id=run_id
                 )
                 db.add(priority)
                 db.flush()
@@ -142,6 +396,9 @@ class ClusteringEngine:
                     "allocated_budget": allocated_budget,
                     "estimated_cost": estimated_cost,
                     "budget_stalled": stalled_status,
+                    "delivery_rate": delivery_rate,
+                    "delivery_reference": delivery_reference,
+                    "delivery_indicator_key": delivery_indicator_key,
                     "expenditure_records": [
                         {"title": e.title, "amount": e.amount, "status": e.status}
                         for e in expenditures
@@ -151,7 +408,8 @@ class ClusteringEngine:
 
                 eb = EvidenceBundle(
                     priority_id=priority.id,
-                    data=evidence
+                    data=evidence,
+                    run_id=run_id
                 )
                 db.add(eb)
                 db.flush()
@@ -177,15 +435,29 @@ class ClusteringEngine:
                     summary=brief_data["summary"],
                     why_prioritized=brief_data["why_prioritized"],
                     fiscal_gap_analysis=brief_data["fiscal_gap_analysis"],
-                    recommended_action=brief_data["recommended_action"]
+                    recommended_action=brief_data["recommended_action"],
+                    run_id=run_id
                 )
                 db.add(nb)
                 db.commit()
+
+            # 8. Mark run as complete
+            run.status = "complete"
+            run.completed_at = func.now()
+            db.add(run)
+            db.commit()
 
             logger.info("Pipeline processing completed successfully!")
         except Exception as e:
             logger.error(f"Pipeline execution failed: {e}")
             db.rollback()
+            try:
+                # Need to use a new transaction/session to update run if rollback happened, 
+                # but run object might be detached. So we re-fetch or just execute an update.
+                db.execute(text("UPDATE analysis_runs SET status = 'failed' WHERE id = :run_id"), {"run_id": run_id})
+                db.commit()
+            except Exception as inner_e:
+                logger.error(f"Failed to update run status to failed: {inner_e}")
             raise
 
 clustering_engine = ClusteringEngine()

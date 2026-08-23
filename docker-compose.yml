@@ -51,8 +51,8 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/sangam
       - ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/sangam
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=gemini-2.5-flash
-      - GEMINI_EMBEDDING_MODEL=text-embedding-004
+      - GEMINI_MODEL=gemini-3.5-flash-lite
+      - GEMINI_EMBEDDING_MODEL=gemini-embedding-001
       - ACTIVE_COUNTRY_PACK=india_karnataka
       - PACKS_DIR=/workspace/packs
       - SEED_DB=${SEED_DB:-false}

@@ -13,6 +13,9 @@ httpx>=0.27.0
 python-multipart>=0.0.9
 pyyaml>=6.0.0
 python-dotenv>=1.0.0
+rapidfuzz>=3.14.0
+aiohttp>=3.14.0
+slowapi>=0.1.9
 
 # Testing
 pytest>=8.0.0

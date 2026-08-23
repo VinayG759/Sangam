@@ -16,14 +16,26 @@ class VerificationEngine:
     bundle is flagged as unverified.
     """
 
-    # Common helper numbers and dates that are ignored from hallucination checking
+    # Numbers exempt from checking.
+    #
+    # Kept deliberately small. The previous list also exempted 2, 3, 4, 5 and
+    # 10, which are exactly the magnitudes a brief uses for counts -- "3
+    # districts affected", "5 blocks stalled". Exempting them meant a wrong
+    # count could never be caught. 0 and 1 are unavoidable in prose, 100 is
+    # needed for "100 percent", and years are not claims about the data.
     ALLOWED_CONSTANTS: Set[float] = {
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 100.0,
-        2020.0, 2021.0, 2022.0, 2023.0, 2024.0, 2025.0, 2026.0, 2027.0, 2028.0
+        0.0, 1.0, 100.0,
+        2019.0, 2020.0, 2021.0, 2022.0, 2023.0, 2024.0,
+        2025.0, 2026.0, 2027.0, 2028.0,
     }
 
     # Tolerance for floating point comparison
     FLOAT_TOLERANCE = 1e-4
+
+    # Relative tolerance permitted when a brief rounds a figure (97.3 for
+    # 97.31). Declared rather than implicit, because every loosening here is
+    # a loosening of the guarantee the whole system rests on.
+    ROUNDING_TOLERANCE = 1e-3
 
     @classmethod
     def _extract_numbers_from_text(cls, text: str) -> List[float]:
@@ -100,23 +112,46 @@ class VerificationEngine:
     @classmethod
     def _numbers_match(cls, num: float, bundle_val: float) -> bool:
         """
-        Check if two numbers match, accounting for:
-        - Direct equality (within float tolerance)
-        - Percentage scale differences (75 vs 0.75)
-        - Rounding differences (e.g., 4.5 vs 4500000 after lakh conversion)
+        Does `num` legitimately represent `bundle_val`?
+
+        This method is the whole anti-hallucination mechanism, so it is
+        deliberately narrow. The previous implementation also accepted
+        num*100, num*100_000 and bundle/100_000 as matches. Those blanket
+        scale shifts meant each bundle value effectively covered five
+        different numbers, and fabricated figures walked straight through:
+        against a bundle of {households: 50444, coverage: 97.31} the invented
+        values 504.44, 5044400, 9731 and 0.9731 were all reported "verified".
+
+        Exactly three things count as a match now:
+
+        1. Equality, within float tolerance.
+        2. Rounding, within ROUNDING_TOLERANCE relative -- a brief may quote
+           97.3 for a stored 97.31. Tight enough that a different figure
+           cannot slip through, loose enough to allow natural prose.
+        3. Ratio expressed as a percentage, and only in that direction, and
+           only when the stored value really is a ratio (0..1) and the quoted
+           value really is a percentage (0..100). Without both guards this
+           single rule is what let 9731 match 97.31.
+
+        Anything else is a fabrication as far as this system is concerned. If
+        a brief needs to quote a figure in another form, the evidence bundle
+        must carry it in that form -- completing the bundle is the bundle
+        builder's job, not the verifier's job to guess.
         """
+        # 1. exact
         if abs(num - bundle_val) < cls.FLOAT_TOLERANCE:
             return True
-        # Percentage scale: 75 ↔ 0.75
-        if abs(num / 100.0 - bundle_val) < cls.FLOAT_TOLERANCE:
+
+        # 2. rounding, same order of magnitude only
+        scale = max(abs(bundle_val), 1.0)
+        if abs(num - bundle_val) / scale < cls.ROUNDING_TOLERANCE:
             return True
-        if abs(num * 100.0 - bundle_val) < cls.FLOAT_TOLERANCE:
-            return True
-        # Lakh scale: 45 ↔ 4500000
-        if abs(num * 100000.0 - bundle_val) < cls.FLOAT_TOLERANCE:
-            return True
-        if bundle_val != 0 and abs(num - bundle_val / 100000.0) < cls.FLOAT_TOLERANCE:
-            return True
+
+        # 3. ratio -> percentage, bounded on both sides
+        if 0.0 <= bundle_val <= 1.0 and 0.0 <= num <= 100.0:
+            if abs(num / 100.0 - bundle_val) < cls.FLOAT_TOLERANCE:
+                return True
+
         return False
 
     @classmethod

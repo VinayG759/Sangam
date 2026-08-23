@@ -27,8 +27,17 @@ async def list_clusters(
     List issue clusters. Each cluster represents a geographic concentration
     of citizen reports about the same infrastructure sector.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     try:
-        stmt = select(IssueCluster)
+        # ST_AsText converts the geometry to plain WKT text in SQL, before it
+        # ever reaches Python -- reading IssueCluster.centroid through the
+        # ORM instead returns a GeoAlchemy2 WKBElement, which FastAPI's
+        # jsonable_encoder cannot serialize (every response would 500).
+        stmt = select(IssueCluster, func.ST_AsText(IssueCluster.centroid)).where(IssueCluster.run_id == run_id)
 
         if sector:
             stmt = stmt.where(IssueCluster.sector == sector)
@@ -37,10 +46,10 @@ async def list_clusters(
 
         stmt = stmt.order_by(IssueCluster.report_count.desc())
         result = await db.execute(stmt)
-        clusters = result.scalars().all()
+        rows = result.all()
 
         items = []
-        for c in clusters:
+        for c, centroid_wkt in rows:
             # Fetch region name
             region_result = await db.execute(
                 select(AdminRegion.name).where(AdminRegion.id == c.region_id)
@@ -49,10 +58,14 @@ async def list_clusters(
 
             # Check if a priority exists for this cluster
             priority_result = await db.execute(
-                select(Priority.id, Priority.score, Priority.verdict)
+                select(Priority.id, Priority.score, Priority.verdict, Priority.details)
                 .where(Priority.cluster_id == c.id)
             )
             priority_row = priority_result.first()
+            
+            # If priority exists and is suppressed, skip this cluster
+            if priority_row and priority_row[3] and priority_row[3].get("suppressed", False):
+                continue
 
             items.append({
                 "id": c.id,
@@ -62,6 +75,8 @@ async def list_clusters(
                 "region_name": region_name,
                 "report_count": c.report_count,
                 "created_at": c.created_at.isoformat() if c.created_at else None,
+                "centroid": centroid_wkt,
+                "is_approximate_location": getattr(c, "is_approximate_location", False),
                 "priority": {
                     "id": priority_row[0],
                     "score": priority_row[1],
@@ -79,8 +94,13 @@ async def get_cluster_detail(cluster_id: int, db: AsyncSession = Depends(get_db)
     """
     Get a single cluster with its linked citizen reports and priority details.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     result = await db.execute(
-        select(IssueCluster).where(IssueCluster.id == cluster_id)
+        select(IssueCluster).where(IssueCluster.id == cluster_id, IssueCluster.run_id == run_id)
     )
     cluster = result.scalar_one_or_none()
     if not cluster:
@@ -110,6 +130,10 @@ async def get_cluster_detail(cluster_id: int, db: AsyncSession = Depends(get_db)
         )
     )
     priority = priority_result.scalar_one_or_none()
+
+    # If priority exists and is suppressed, return 404 as if cluster doesn't exist
+    if priority and priority.details and priority.details.get("suppressed", False):
+        raise HTTPException(status_code=404, detail="Cluster not found")
 
     priority_data = None
     if priority:

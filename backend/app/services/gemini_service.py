@@ -18,6 +18,7 @@ class CitizenReportAnalysis(BaseModel):
     urgency_score: float = Field(description="Urgency score from 1.0 (low priority) to 5.0 (immediate crisis/danger)")
     sentiment: str = Field(description="Sentiment: positive, neutral, or negative")
     extracted_location_entities: List[str] = Field(default=[], description="List of location entities (wards, streets, landmarks) extracted")
+    location_text_latin: Optional[str] = Field(default=None, description="The place name romanized into a standard spelling for gazetteer resolution")
     pii_redacted_text: str = Field(description="English translation text with PII (names, phone numbers, emails) replaced by [REDACTED]")
 
 # call 3 Schema definition
@@ -46,21 +47,29 @@ class GeminiService:
             self._client = genai.Client(api_key=api_key)
         return self._client
 
-    def analyze_citizen_report(self, text_content: str) -> Dict[str, Any]:
+    def analyze_citizen_report(self, text_content: Optional[str] = None, audio_bytes: Optional[bytes] = None, mime_type: Optional[str] = None) -> Dict[str, Any]:
         """
         Call 1: Analyze citizen voice/text report, translate to English, categorise, and redact PII.
+        Accepts either text_content or audio_bytes with mime_type.
         """
-        prompt = f"""
+        prompt = """
         Analyze the following citizen report. Redact any personally identifiable information (PII)
         such as names, telephone numbers, emails, and home addresses, and extract categories.
-        
-        Citizen Report:
-        \"\"\"{text_content}\"\"\"
+        If this is an audio file, transcribe it first, then analyze it.
         """
+        
+        contents = [prompt]
+        if audio_bytes and mime_type:
+            contents.append(
+                types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+            )
+        if text_content:
+            contents.append(text_content)
+
         try:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_MODEL,
-                contents=prompt,
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=CitizenReportAnalysis,
@@ -79,24 +88,37 @@ class GeminiService:
                 "urgency_score": 1.0,
                 "sentiment": "neutral",
                 "extracted_location_entities": [],
-                "pii_redacted_text": text_content
+                "location_text_latin": None,
+                "pii_redacted_text": text_content or "[Audio - Failed to process]"
             }
 
     def get_embedding(self, text: str) -> List[float]:
         """
         Generate semantic vector embedding for similarity mapping.
         """
+        dim = settings.GEMINI_EMBEDDING_DIM
         try:
+            # output_dimensionality is not optional. gemini-embedding-001
+            # defaults to 3072 dimensions; the embedding column is Vector(768),
+            # so omitting this raises on insert rather than at call time --
+            # a failure that would surface deep in the batch job, not here.
             response = self.client.models.embed_content(
                 model=settings.GEMINI_EMBEDDING_MODEL,
-                contents=text
+                contents=text,
+                config={"output_dimensionality": dim},
             )
-            # Response format has embeddings list containing values list
-            return response.embeddings[0].values
+            values = list(response.embeddings[0].values)
+            if len(values) != dim:
+                logger.error(
+                    "Embedding model %s returned %d dimensions, expected %d. "
+                    "Refusing to return a mis-shaped vector.",
+                    settings.GEMINI_EMBEDDING_MODEL, len(values), dim,
+                )
+                return [0.0] * dim
+            return values
         except Exception as e:
             logger.error(f"Error generating embedding from Gemini: {e}")
-            # Return dummy list of correct length (768) if it fails
-            return [0.0] * 768
+            return [0.0] * dim
 
     def generate_policy_brief(self, evidence_bundle: Dict[str, Any]) -> Dict[str, Any]:
         """

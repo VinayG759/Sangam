@@ -11,6 +11,11 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
     """
     Returns high-level metric cards for the main dashboard view.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     try:
         # Total citizen reports
         result = await db.execute(select(func.count(CitizenReport.id)))
@@ -22,13 +27,13 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
 
         # Unserved gaps count (Priority verdict is UNSERVED_GAP)
         result = await db.execute(
-            select(func.count(Priority.id)).where(Priority.verdict == "UNSERVED_GAP")
+            select(func.count(Priority.id)).where(Priority.verdict == "UNSERVED_GAP", Priority.run_id == run_id)
         )
         unserved_gaps_count = result.scalar() or 0
 
         # Stalled allocations count (Priority verdict is STALLED_ALLOCATION)
         result = await db.execute(
-            select(func.count(Priority.id)).where(Priority.verdict == "STALLED_ALLOCATION")
+            select(func.count(Priority.id)).where(Priority.verdict == "STALLED_ALLOCATION", Priority.run_id == run_id)
         )
         stalled_projects_count = result.scalar() or 0
 

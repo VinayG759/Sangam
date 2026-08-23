@@ -106,6 +106,29 @@ class TestScoreCalculation:
         )
         assert result["breakdown"]["expenditure_gap"] == 0.8
 
+    def test_missing_vulnerability_index_renormalizes_weights(self):
+        """None for vulnerability_index triggers partial evidence and renormalizes remaining weights."""
+        result = scoring_engine.calculate_priority_score(
+            report_count=50,
+            max_reports_in_region=100,  # demand_density = 0.5
+            vulnerability_index=None,
+            allocated_budget=0.0,       # expenditure_gap = 1.0
+            estimated_cost=1000000.0,
+            stalled_status=False,
+            average_urgency=5.0         # urgency = 1.0
+        )
+        
+        # Original weights:
+        # demand_density = 0.35, vulnerability_index = 0.35, expenditure_gap = 0.20, urgency = 0.10
+        # Sum without vulnerability = 0.35 + 0.20 + 0.10 = 0.65
+        # Weighted = (0.35 * 0.5) + (0.20 * 1.0) + (0.10 * 1.0) = 0.175 + 0.20 + 0.10 = 0.475
+        # Final Score = 0.475 / 0.65 = 0.73076...
+        
+        assert result["partial_evidence"] is True
+        assert result["breakdown"]["vulnerability"] is None
+        assert result["weights_applied"]["vulnerability_index"] == 0.0
+        assert result["score"] == pytest.approx(73.08, abs=0.01)
+
 
 class TestVerdictClassification:
     """Tests for verdict logic."""
@@ -174,6 +197,94 @@ class TestVerdictClassification:
             average_urgency=5.0
         )
         assert result["verdict"] == "WELL_SERVED"
+
+
+class TestDeliveryGapVerdict:
+    """
+    Tests for DELIVERY_GAP (Phase 13, docs/IMPLEMENTATION_PLAN.md): the
+    verdict used when no Expenditure rows exist at all for a region+sector,
+    but a real delivery-rate shortfall vs. the region's own parent district
+    does exist -- the case every real Karnataka region is in today, since
+    no district-level budget data exists (docs/DECISIONS.md #2).
+    """
+
+    def test_delivery_gap_fires_with_real_shortfall(self):
+        """Zero budget + a real delivery shortfall vs. parent → DELIVERY_GAP."""
+        result = scoring_engine.calculate_priority_score(
+            report_count=5,
+            max_reports_in_region=100,
+            vulnerability_index=0.5,
+            allocated_budget=0.0,
+            estimated_cost=1000000.0,
+            stalled_status=False,
+            average_urgency=3.0,
+            delivery_rate=77.85,       # Hiriyur's real water.piped_household_pct
+            delivery_reference=88.5,   # Chitradurga district's real value
+        )
+        assert result["verdict"] == "DELIVERY_GAP"
+        assert result["delivery_rate"] == 77.85
+        assert result["delivery_reference"] == 88.5
+
+    def test_unserved_gap_when_no_delivery_signal_provided(self):
+        """Zero budget, no delivery data at all → still UNSERVED_GAP, unchanged."""
+        result = scoring_engine.calculate_priority_score(
+            report_count=5,
+            max_reports_in_region=100,
+            vulnerability_index=0.5,
+            allocated_budget=0.0,
+            estimated_cost=1000000.0,
+            stalled_status=False,
+            average_urgency=3.0,
+        )
+        assert result["verdict"] == "UNSERVED_GAP"
+        assert result["delivery_rate"] is None
+
+    def test_unserved_gap_when_shortfall_below_noise_threshold(self):
+        """A trivial gap (< MIN_DELIVERY_GAP) should not fire DELIVERY_GAP."""
+        result = scoring_engine.calculate_priority_score(
+            report_count=5,
+            max_reports_in_region=100,
+            vulnerability_index=0.5,
+            allocated_budget=0.0,
+            estimated_cost=1000000.0,
+            stalled_status=False,
+            average_urgency=3.0,
+            delivery_rate=87.0,
+            delivery_reference=88.5,  # 1.5-point gap, below the 2.0 threshold
+        )
+        assert result["verdict"] == "UNSERVED_GAP"
+
+    def test_delivery_gap_never_overrides_real_budget_data(self):
+        """A real Expenditure record always takes precedence over a delivery signal."""
+        result = scoring_engine.calculate_priority_score(
+            report_count=5,
+            max_reports_in_region=100,
+            vulnerability_index=0.5,
+            allocated_budget=1000000.0,  # real budget exists
+            estimated_cost=1000000.0,
+            stalled_status=True,
+            average_urgency=3.0,
+            delivery_rate=50.0,
+            delivery_reference=90.0,  # a large delivery gap, but irrelevant here
+        )
+        assert result["verdict"] == "STALLED_ALLOCATION"
+
+    def test_delivery_gap_expenditure_score_reflects_shortfall_magnitude(self):
+        """A bigger delivery shortfall should score a bigger expenditure_gap."""
+        small_gap = scoring_engine.calculate_priority_score(
+            report_count=5, max_reports_in_region=100, vulnerability_index=0.5,
+            allocated_budget=0.0, estimated_cost=1000000.0, stalled_status=False,
+            average_urgency=3.0, delivery_rate=85.0, delivery_reference=90.0,
+        )
+        large_gap = scoring_engine.calculate_priority_score(
+            report_count=5, max_reports_in_region=100, vulnerability_index=0.5,
+            allocated_budget=0.0, estimated_cost=1000000.0, stalled_status=False,
+            average_urgency=3.0, delivery_rate=40.0, delivery_reference=90.0,
+        )
+        assert small_gap["verdict"] == "DELIVERY_GAP"
+        assert large_gap["verdict"] == "DELIVERY_GAP"
+        assert large_gap["breakdown"]["expenditure_gap"] > small_gap["breakdown"]["expenditure_gap"]
+        assert large_gap["score"] > small_gap["score"]
 
 
 class TestInputClamping:

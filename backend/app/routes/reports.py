@@ -6,11 +6,12 @@ Provides endpoints for:
 - Getting a single report's full detail
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
 from app.db import get_db
+from app.limiter import limiter
 from app.models.models import CitizenReport
 
 router = APIRouter(prefix="/api/v1", tags=["Citizen Reports"])
@@ -30,6 +31,11 @@ async def list_reports(
     List citizen reports with optional filtering and pagination.
     Reports are ordered by most recent first.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     try:
         stmt = select(CitizenReport)
 
@@ -84,23 +90,78 @@ async def get_report_detail(report_id: int, db: AsyncSession = Depends(get_db)):
     """
     Get a single citizen report's full detail.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     result = await db.execute(
         select(CitizenReport).where(CitizenReport.id == report_id)
     )
-    report = result.scalar_one_or_none()
-    if not report:
+    r = result.scalar_one_or_none()
+    if not r:
         raise HTTPException(status_code=404, detail="Citizen report not found")
 
+    cluster_id = r.cluster_id
+    verdict = None
+    if cluster_id:
+        p_result = await db.execute(
+            select(Priority).where(Priority.cluster_id == cluster_id)
+        )
+        p = p_result.scalar_one_or_none()
+        if p:
+            verdict = p.verdict
+
     return {
-        "id": report.id,
-        "raw_text": report.raw_text,
-        "detected_language": report.detected_language,
-        "english_translation": report.english_translation,
-        "sector": report.sector,
-        "specific_issue": report.specific_issue,
-        "urgency_score": report.urgency_score,
-        "sentiment": report.sentiment,
-        "pii_redacted_text": report.pii_redacted_text,
-        "cluster_id": report.cluster_id,
-        "reported_at": report.reported_at.isoformat() if report.reported_at else None,
+        "id": r.id,
+        "raw_text": r.raw_text,
+        "translated_text": r.english_translation,
+        "sector": r.sector,
+        "specific_issue": r.specific_issue,
+        "urgency_score": r.urgency_score,
+        "cluster_id": cluster_id,
+        "verdict": verdict,
+        "reported_at": r.reported_at.isoformat() if r.reported_at else None
+    }
+
+
+@router.get("/citizens/{tracking_id}")
+@limiter.limit("20/minute")
+async def get_citizen_report_by_tracking_id(request: Request, tracking_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Get a citizen report status by tracking ID.
+    Used for the citizen trust loop.
+
+    Rate-limited per IP: this route is intentionally unauthenticated (a
+    citizen looking up their own report has no other credential), so the
+    tracking-id length and this limit are what stand between it and
+    enumeration -- see app/utils/tracking_id.py.
+    """
+    result = await db.execute(
+        select(CitizenReport).where(CitizenReport.tracking_id == tracking_id)
+    )
+    r = result.scalar_one_or_none()
+    if not r:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Optionally fetch cluster and priority status to show progress
+    status = "received"
+    if r.cluster_id:
+        status = "clustered"
+        p_result = await db.execute(select(Priority).where(Priority.cluster_id == r.cluster_id))
+        p = p_result.scalar_one_or_none()
+        if p:
+            status = p.verdict.lower()
+
+    # specific_issue is deliberately withheld here: this route is unauthenticated
+    # and the tracking ID is short enough that a determined scraper could still
+    # walk part of the space even after lengthening it. Free-text issue content
+    # is more identifying than a sector code, so it's kept out of the one
+    # response an anonymous caller can get from a guessed ID.
+    return {
+        "tracking_id": r.tracking_id,
+        "sector": r.sector,
+        "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+        "status": status,
+        "channel": r.channel
     }

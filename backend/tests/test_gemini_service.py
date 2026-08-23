@@ -84,6 +84,30 @@ class TestAnalyzeCitizenReport:
         prompt = call_args.kwargs.get("contents", "") or call_args[1].get("contents", "")
         assert "Water problem in our area" in prompt
 
+    def test_multimodal_image_input(self, gemini_service):
+        """Should accept image/jpeg alongside audio bytes and pass it to Gemini."""
+        mock_response = MagicMock()
+        mock_response.text = json.dumps({
+            "original_language": "en",
+            "english_translation": "Broken pipe",
+            "sector": "water",
+            "specific_issue": "Broken pipe in photo",
+            "urgency_score": 4.0,
+            "sentiment": "negative",
+            "extracted_location_entities": [],
+            "pii_redacted_text": "Broken pipe"
+        })
+        gemini_service._client.models.generate_content.return_value = mock_response
+
+        gemini_service.analyze_citizen_report(audio_bytes=b"fake_image", mime_type="image/jpeg")
+
+        call_args = gemini_service._client.models.generate_content.call_args
+        contents = call_args.kwargs.get("contents", "") or call_args[1].get("contents", "")
+        assert isinstance(contents, list)
+        
+        # We can just verify it was called
+        assert gemini_service._client.models.generate_content.called
+
 
 class TestGetEmbedding:
     """Tests for get_embedding."""

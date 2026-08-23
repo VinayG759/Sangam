@@ -2,7 +2,7 @@ import os
 import logging
 import yaml
 from pydantic import BaseModel, Field, field_validator
-from typing import List
+from typing import List, Optional
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,13 @@ class CountryPack(BaseModel):
     languages: List[LanguageConfig]
     sectors: List[SectorConfig]
     weights: WeightsConfig
+    # Privacy floor override (see scoring_engine.DEFAULT_MIN_DISTINCT_REPORTERS
+    # and docs/DECISIONS.md #9). None means "use the engine's default" -- this
+    # field previously didn't exist on the model, so scoring_engine.py's
+    # getattr(pack, "min_distinct_reporters", None) always silently returned
+    # None regardless of what a pack.yaml set, since Pydantic models reject
+    # undeclared attributes rather than falling through to getattr's default.
+    min_distinct_reporters: Optional[int] = None
 
 
 class PackLoader:

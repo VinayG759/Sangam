@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
@@ -11,13 +12,27 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/sangam"
     ASYNC_DATABASE_URL: Optional[str] = None
     
-    # Gemini AI configuration
+    # Gemini AI configuration.
+    #
+    # Model ids verified against the live API on 22 Aug 2026:
+    #   - text-embedding-004 returns 404 NOT_FOUND. It no longer exists.
+    #   - gemini-embedding-001 defaults to 3072 dimensions, but the
+    #     citizen_reports.embedding column is Vector(768), so
+    #     GEMINI_EMBEDDING_DIM must be passed explicitly on every call or
+    #     inserts fail. Keep these two settings in step.
+    #   - gemini-3.6-flash returns 503 "high demand" on the free tier;
+    #     gemini-3.5-flash-lite answers the same schema-locked extraction in
+    #     ~1.2s. Availability beats capability when a demo is live.
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
-    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
-    
-    # Country Pack Directory & Selection
-    PACKS_DIR: str = "packs"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    GEMINI_EMBEDDING_DIM: int = 768
+
+    # Country Pack Directory & Selection.
+    # Resolved against the repository root, not the working directory: the app
+    # runs from /app inside Docker and from backend/ under pytest, so a relative
+    # "packs" path silently fails to resolve in both.
+    PACKS_DIR: str = str(Path(__file__).resolve().parents[2] / "packs")
     ACTIVE_COUNTRY_PACK: str = "india_karnataka"
     
     model_config = SettingsConfigDict(

@@ -3,11 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import Optional
+from fastapi import File, Form, UploadFile
 from app.db import get_db
 from app.models.models import Priority, IssueCluster, AdminRegion, CitizenReport, Indicator, Expenditure, EvidenceBundle, NarrativeBrief
 from app.services.simulation_engine import simulation_engine
 from app.services.gemini_service import gemini_service
 from app.services.clustering_engine import clustering_engine
+from app.schemas import CitizenIngestResponse
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1", tags=["Priorities & Actions"])
@@ -30,11 +32,20 @@ async def get_priorities(
     """
     Returns ranked priorities with index scores, report counts, and region references.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     try:
         stmt = (
             select(Priority)
             .join(IssueCluster)
-            .options(selectinload(Priority.cluster))
+            .where(Priority.run_id == run_id)
+            .options(
+                selectinload(Priority.cluster),
+                selectinload(Priority.evidence_bundle)
+            )
         )
 
         if sector:
@@ -49,6 +60,9 @@ async def get_priorities(
 
         output = []
         for p in priorities:
+            if p.details and p.details.get("suppressed", False):
+                continue
+                
             cluster = p.cluster
             # Fetch region name
             region_result = await db.execute(
@@ -66,7 +80,8 @@ async def get_priorities(
                 "verdict": p.verdict,
                 "report_count": cluster.report_count,
                 "region_name": region_name,
-                "details": p.details
+                "details": p.details,
+                "list_type": p.list if p.list else "fund"
             })
         return output
     except Exception as e:
@@ -77,31 +92,38 @@ async def get_priority_detail(priority_id: int, db: AsyncSession = Depends(get_d
     """
     Returns details for a priority, including the immutable evidence bundle and narrative brief.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     result = await db.execute(
         select(Priority)
-        .where(Priority.id == priority_id)
+        .where(Priority.id == priority_id, Priority.run_id == run_id)
         .options(
             selectinload(Priority.evidence_bundle),
-            selectinload(Priority.narrative_brief)
+            selectinload(Priority.narrative_brief),
+            selectinload(Priority.cluster)
         )
     )
     p = result.scalar_one_or_none()
-    if not p:
+    
+    # Return 404 if not found or if the priority is suppressed (privacy floor)
+    if not p or (p.details and p.details.get("suppressed", False)):
         raise HTTPException(status_code=404, detail="Priority record not found")
 
-    evidence = p.evidence_bundle
-    brief = p.narrative_brief
+    evidence_data = p.evidence_bundle.data if p.evidence_bundle else {}
 
     return {
         "id": p.id,
         "score": p.score,
         "verdict": p.verdict,
-        "evidence_bundle": evidence.data if evidence else {},
+        "evidence_bundle": evidence_data,
         "narrative_brief": {
-            "summary": brief.summary if brief else "Brief missing.",
-            "why_prioritized": brief.why_prioritized if brief else "Not analyzed.",
-            "fiscal_gap_analysis": brief.fiscal_gap_analysis if brief else "No gap analysis.",
-            "recommended_action": brief.recommended_action if brief else "No recommendation."
+            "summary": p.narrative_brief.summary if p.narrative_brief else "Brief missing.",
+            "why_prioritized": p.narrative_brief.why_prioritized if p.narrative_brief else "Not analyzed.",
+            "fiscal_gap_analysis": p.narrative_brief.fiscal_gap_analysis if p.narrative_brief else "No gap analysis.",
+            "recommended_action": p.narrative_brief.recommended_action if p.narrative_brief else "No recommendation."
         }
     }
 
@@ -110,9 +132,15 @@ async def run_simulation(req: SimulationRequest, db: AsyncSession = Depends(get_
     """
     Interactive what-if budget allocator simulator.
     """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
     try:
         result = await db.execute(
             select(Priority)
+            .where(Priority.run_id == run_id)
             .options(
                 selectinload(Priority.cluster),
                 selectinload(Priority.evidence_bundle)
@@ -153,49 +181,35 @@ async def run_simulation(req: SimulationRequest, db: AsyncSession = Depends(get_
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/ingest/citizen")
+@router.post("/ingest/citizen", response_model=CitizenIngestResponse)
 async def ingest_citizen_report(
-    req: CitizenInflowRequest,
+    text: Optional[str] = Form(None),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    file: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Ingest a new citizen voice/text report, translate, analyze PII, and save to DB.
+    Ingest a new citizen voice/text/image report, translate, analyze PII, and save to DB.
     """
-    try:
-        # Run Call 1 Gemini analysis
-        analysis = gemini_service.analyze_citizen_report(req.text)
+    from app.services.ingestion_service import ingest_citizen_message
 
-        # Get semantic embedding
-        embedding = gemini_service.get_embedding(analysis.get("english_translation", req.text))
+    audio_bytes = None
+    mime_type = None
+    if file:
+        audio_bytes = await file.read()
+        mime_type = file.content_type
 
-        # Save report
-        location_wkt = None
-        if req.latitude is not None and req.longitude is not None:
-            location_wkt = f"SRID=4326;POINT({req.longitude} {req.latitude})"
-
-        report = CitizenReport(
-            raw_text=req.text,
-            detected_language=analysis.get("original_language", "en"),
-            english_translation=analysis.get("english_translation", req.text),
-            sector=analysis.get("sector", "other"),
-            specific_issue=analysis.get("specific_issue", ""),
-            urgency_score=analysis.get("urgency_score", 1.0),
-            sentiment=analysis.get("sentiment", "neutral"),
-            pii_redacted_text=analysis.get("pii_redacted_text", req.text),
-            location=location_wkt,
-            embedding=embedding
-        )
-        db.add(report)
-        await db.flush()
-
-        return {
-            "status": "success",
-            "report_id": report.id,
-            "analysis_extracted": analysis
-        }
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    result = await ingest_citizen_message(
+        db=db,
+        text=text,
+        audio_bytes=audio_bytes,
+        mime_type=mime_type,
+        latitude=latitude,
+        longitude=longitude,
+        channel="web"
+    )
+    return result
 
 @router.post("/reprocess")
 async def trigger_reprocessing(db: AsyncSession = Depends(get_db)):

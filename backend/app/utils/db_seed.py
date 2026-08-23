@@ -1,4 +1,5 @@
 import logging
+import os
 from sqlalchemy.orm import Session
 from app.db import SessionLocal, engine
 from app.models.models import AdminRegion, CitizenReport, Expenditure, Indicator
@@ -7,10 +8,37 @@ from app.services.gemini_service import gemini_service
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+class RealDataPresentError(RuntimeError):
+    """Refusing to overwrite real citizen data with the demo seed."""
+
+
 def seed_data():
     logger.info("Seeding database...")
     db = SessionLocal()
     try:
+        # 0. Refuse to clobber real citizen data. tracking_id is only ever
+        # set by ingestion_service.ingest_citizen_message (the real web/
+        # Telegram/WhatsApp intake path) -- this script never sets it. Its
+        # presence means at least one row is a real citizen's report, not
+        # demo data, and the delete-everything step below would destroy it
+        # permanently. The documented flow (docker-entrypoint.sh) runs this
+        # seed BEFORE load_real_data.py on a fresh database, so no real
+        # reports exist yet and this check passes through silently; it only
+        # ever fires on a database that already has real citizen activity.
+        real_report_count = db.query(CitizenReport).filter(
+            CitizenReport.tracking_id.isnot(None)
+        ).count()
+        if real_report_count > 0 and os.environ.get("FORCE_RESEED") != "true":
+            raise RealDataPresentError(
+                f"Refusing to seed: {real_report_count} citizen_reports row(s) already have "
+                "a tracking_id, meaning they came from a real citizen, not this demo script. "
+                "Seeding deletes every row in citizen_reports, expenditures, indicators, and "
+                "admin_regions -- that would permanently destroy real citizen submissions. "
+                "If this is a demo environment you are intentionally resetting, set "
+                "FORCE_RESEED=true and re-run."
+            )
+
         # 1. Clean existing data
         logger.info("Clearing old tables...")
         db.query(Indicator).delete()
@@ -25,6 +53,7 @@ def seed_data():
             country_code="IND",
             name="Karnataka",
             level="state",
+            population=61_095_297,  # Census 2011, illustrative for this seed path
             geom="SRID=4326;POLYGON((74.0 11.5, 78.5 11.5, 78.5 18.5, 74.0 18.5, 74.0 11.5))"
         )
         db.add(karnataka)
@@ -34,6 +63,7 @@ def seed_data():
             country_code="IND",
             name="Bengaluru",
             level="district",
+            population=9_621_551,  # illustrative
             parent_id=karnataka.id,
             geom="SRID=4326;POLYGON((77.3 12.8, 77.8 12.8, 77.8 13.2, 77.3 13.2, 77.3 12.8))"
         )
@@ -45,6 +75,7 @@ def seed_data():
             country_code="IND",
             name="Koramangala Ward",
             level="ward",
+            population=45_000,  # illustrative demo figure
             parent_id=bengaluru.id,
             geom="SRID=4326;POLYGON((77.61 12.92, 77.64 12.92, 77.64 12.95, 77.61 12.95, 77.61 12.92))"
         )
@@ -52,6 +83,7 @@ def seed_data():
             country_code="IND",
             name="Indiranagar Ward",
             level="ward",
+            population=38_000,  # illustrative demo figure
             parent_id=bengaluru.id,
             geom="SRID=4326;POLYGON((77.62 12.96, 77.66 12.96, 77.66 12.99, 77.62 12.99, 77.62 12.96))"
         )
@@ -59,6 +91,7 @@ def seed_data():
             country_code="IND",
             name="HSR Layout Ward",
             level="ward",
+            population=52_000,  # illustrative demo figure
             parent_id=bengaluru.id,
             geom="SRID=4326;POLYGON((77.62 12.88, 77.66 12.88, 77.66 12.92, 77.62 12.92, 77.62 12.88))"
         )
@@ -131,8 +164,8 @@ def seed_data():
                 specific_issue="Dangerous potholes on main road",
                 urgency_score=4.5,
                 sentiment="negative",
-                location="SRID=4326;POINT(77.6241 12.9358)"
-            ),
+                location="SRID=4326;POINT(77.6241 12.9358)",
+                reporter_hash="seed-citizen-001"),
             CitizenReport(
                 raw_text="The potholes on Koramangala 80 feet road are getting worse everyday. Commuting has become a nightmare.",
                 detected_language="en",
@@ -141,8 +174,8 @@ def seed_data():
                 specific_issue="Severe road damage and potholes",
                 urgency_score=4.0,
                 sentiment="negative",
-                location="SRID=4326;POINT(77.6228 12.9345)"
-            ),
+                location="SRID=4326;POINT(77.6228 12.9345)",
+                reporter_hash="seed-citizen-002"),
 
             # Indiranagar: Water crisis (Unserved gap because there is zero budget for water sector in Indiranagar)
             CitizenReport(
@@ -153,8 +186,8 @@ def seed_data():
                 specific_issue="Total lack of drinking water supply",
                 urgency_score=5.0,
                 sentiment="negative",
-                location="SRID=4326;POINT(77.6405 12.9792)"
-            ),
+                location="SRID=4326;POINT(77.6405 12.9792)",
+                reporter_hash="seed-citizen-003"),
             CitizenReport(
                 raw_text="Drinking water pipe leakage has resulted in zero water pressure. No water for our daily chores in Indiranagar.",
                 detected_language="en",
@@ -163,8 +196,8 @@ def seed_data():
                 specific_issue="Pipeline leak causing supply failure",
                 urgency_score=3.5,
                 sentiment="negative",
-                location="SRID=4326;POINT(77.6421 12.9770)"
-            ),
+                location="SRID=4326;POINT(77.6421 12.9770)",
+                reporter_hash="seed-citizen-004"),
 
             # HSR Layout: Waste pile reports
             CitizenReport(
@@ -175,8 +208,121 @@ def seed_data():
                 specific_issue="Uncleared waste heap and disease vector risk",
                 urgency_score=3.0,
                 sentiment="negative",
-                location="SRID=4326;POINT(77.6391 12.9062)"
-            )
+                location="SRID=4326;POINT(77.6391 12.9062)",
+                reporter_hash="seed-citizen-005"),
+
+            # ── Additional reporters per cluster ──────────────────────────
+            # scoring_engine.py's aggregation floor (docs/DECISIONS.md #9)
+            # hides any cluster with fewer than min_distinct_reporters (5 by
+            # default) behind a WELL_SERVED verdict, regardless of the real
+            # gap -- a real privacy protection, not a bug. The two reports
+            # per scenario above predate that floor and can never clear it,
+            # so no demo cluster could ever show its real verdict. These
+            # extra distinct reporters (still just 2 issues, more people
+            # experiencing each) bring every scenario up to 5+ so the floor
+            # passes them through instead of suppressing them.
+            CitizenReport(
+                raw_text="Same pothole issue on Koramangala 80 feet road, my scooter got damaged again this week.",
+                detected_language="en",
+                english_translation="Same pothole issue on Koramangala 80 feet road, my scooter got damaged again this week.",
+                sector="roads",
+                specific_issue="Vehicle damage from unrepaired potholes",
+                urgency_score=4.0,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6236 12.9349)",
+                reporter_hash="seed-citizen-006"),
+            CitizenReport(
+                raw_text="ಕೋರಮಂಗಲದಲ್ಲಿ ರಸ್ತೆ ದುರಸ್ತಿ ಕೆಲಸ ಪ್ರಾರಂಭವಾಗಿಲ್ಲ. ಗುಂಡಿಗಳು ಹಾಗೆಯೇ ಇವೆ.",
+                detected_language="kn",
+                english_translation="Road repair work has not started in Koramangala. The potholes are still there.",
+                sector="roads",
+                specific_issue="Sanctioned repair work never began",
+                urgency_score=4.2,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6245 12.9362)",
+                reporter_hash="seed-citizen-007"),
+            CitizenReport(
+                raw_text="It has been months and the Koramangala road contractor has not returned to finish the asphalt work.",
+                detected_language="en",
+                english_translation="It has been months and the Koramangala road contractor has not returned to finish the asphalt work.",
+                sector="roads",
+                specific_issue="Stalled contractor work on sanctioned repair",
+                urgency_score=3.8,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6220 12.9340)",
+                reporter_hash="seed-citizen-008"),
+
+            CitizenReport(
+                raw_text="इंदिरानगर में पानी की सप्लाई अब भी बंद है। बच्चों के लिए पानी लाना मुश्किल हो गया है।",
+                detected_language="hi",
+                english_translation="Water supply in Indiranagar is still cut off. It has become difficult to fetch water for the children.",
+                sector="water",
+                specific_issue="Continued lack of drinking water supply",
+                urgency_score=4.8,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6398 12.9788)",
+                reporter_hash="seed-citizen-009"),
+            CitizenReport(
+                raw_text="No municipal water tanker has come to Indiranagar in over a week. We are buying bottled water for cooking.",
+                detected_language="en",
+                english_translation="No municipal water tanker has come to Indiranagar in over a week. We are buying bottled water for cooking.",
+                sector="water",
+                specific_issue="No tanker supply, no piped water",
+                urgency_score=4.6,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6415 12.9779)",
+                reporter_hash="seed-citizen-010"),
+            CitizenReport(
+                raw_text="Elderly residents in Indiranagar are struggling without any water connection for daily use.",
+                detected_language="en",
+                english_translation="Elderly residents in Indiranagar are struggling without any water connection for daily use.",
+                sector="water",
+                specific_issue="Vulnerable residents affected by water shortage",
+                urgency_score=4.9,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6409 12.9765)",
+                reporter_hash="seed-citizen-011"),
+
+            CitizenReport(
+                raw_text="HSR ಲೇಔಟ್ ಸೆಕ್ಟರ್ 3ರಲ್ಲಿ ಕಸ ಇನ್ನೂ ತೆಗೆದಿಲ್ಲ, ಸೊಳ್ಳೆ ಕಾಟ ಜಾಸ್ತಿಯಾಗಿದೆ.",
+                detected_language="kn",
+                english_translation="The garbage in HSR Layout sector 3 still hasn't been cleared, mosquito problems have increased.",
+                sector="sanitation",
+                specific_issue="Uncleared waste heap, rising mosquito risk",
+                urgency_score=3.2,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6388 12.9058)",
+                reporter_hash="seed-citizen-012"),
+            CitizenReport(
+                raw_text="The garbage collection truck has skipped HSR Layout sector 3 for the third time this month.",
+                detected_language="en",
+                english_translation="The garbage collection truck has skipped HSR Layout sector 3 for the third time this month.",
+                sector="sanitation",
+                specific_issue="Missed garbage collection rounds",
+                urgency_score=2.8,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6395 12.9070)",
+                reporter_hash="seed-citizen-013"),
+            CitizenReport(
+                raw_text="Children playing near the uncleared garbage pile in HSR sector 3 is a genuine health hazard now.",
+                detected_language="en",
+                english_translation="Children playing near the uncleared garbage pile in HSR sector 3 is a genuine health hazard now.",
+                sector="sanitation",
+                specific_issue="Health hazard from uncleared waste near children",
+                urgency_score=3.6,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6383 12.9068)",
+                reporter_hash="seed-citizen-014"),
+            CitizenReport(
+                raw_text="ಈ ಕಸದ ರಾಶಿ ಒಂದು ತಿಂಗಳಿಂದ ಹಾಗೆಯೇ ಇದೆ, ಪಾಲಿಕೆಗೆ ದೂರು ಕೊಟ್ಟರೂ ಪ್ರಯೋಜನವಿಲ್ಲ.",
+                detected_language="kn",
+                english_translation="This garbage heap has been sitting here for a month, complaining to the municipal corporation hasn't helped.",
+                sector="sanitation",
+                specific_issue="Complaint filed with no municipal response",
+                urgency_score=3.4,
+                sentiment="negative",
+                location="SRID=4326;POINT(77.6392 12.9055)",
+                reporter_hash="seed-citizen-015")
         ]
         
         # Populate embeddings asynchronously using GeminiService if API key is provided

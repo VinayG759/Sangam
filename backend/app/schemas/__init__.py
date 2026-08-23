@@ -87,12 +87,15 @@ class CitizenReportAnalysisResponse(BaseModel):
     urgency_score: float = Field(ge=1.0, le=5.0)
     sentiment: str
     extracted_location_entities: List[str] = Field(default_factory=list)
+    location_text_latin: Optional[str] = Field(None, description="The place name romanized into a standard spelling for gazetteer resolution")
     pii_redacted_text: str
 
 class CitizenIngestResponse(BaseModel):
     status: str
     report_id: int
+    tracking_id: str
     analysis_extracted: CitizenReportAnalysisResponse
+    needs_location_followup: bool
 
 
 # ─── Simulation ─────────────────────────────────────────────────────────────────
