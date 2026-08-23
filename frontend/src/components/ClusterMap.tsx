@@ -323,7 +323,7 @@ export default function ClusterMap({ clusters, onViewDetails }: ClusterMapProps)
   const sortedClusters = [...clusters].sort((a, b) => (b.priority?.score ?? 0) - (a.priority?.score ?? 0))
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative' }}>
+    <div ref={wrapperRef} style={{ position: 'relative', isolation: 'isolate' }}>
       <div ref={containerRef} className="cluster-map-surface" style={{ height: 360, width: '100%', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }} />
 
       {/* Overlaid rather than replacing the map above -- the container div
