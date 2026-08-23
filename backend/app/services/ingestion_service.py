@@ -8,6 +8,7 @@ from app.utils.tracking_id import generate_tracking_id
 from app.services.location_resolver import resolve_location
 from datetime import datetime, timedelta
 from app.services.pack_loader import pack_loader
+from app.services.reprocess_scheduler import schedule_reprocess
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,14 @@ async def ingest_citizen_message(
             )
             db.add(pending)
             await db.flush()
+
+        # Fire-and-forget: the dashboard (overview/priorities/clusters)
+        # only reflects reports that have gone through the clustering/
+        # prioritization pipeline, which used to require someone to
+        # manually POST /api/v1/reprocess after every batch of new
+        # reports. This schedules that pipeline to run automatically a
+        # short while after ingestion instead.
+        schedule_reprocess()
 
         return {
             "status": "success",

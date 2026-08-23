@@ -3,6 +3,18 @@ from unittest.mock import AsyncMock, MagicMock
 from app.services.ingestion_service import ingest_citizen_message
 from app.models.models import CitizenReport
 
+
+@pytest.fixture(autouse=True)
+def _no_background_reprocess(monkeypatch):
+    # ingest_citizen_message schedules a real asyncio background task on
+    # success (see reprocess_scheduler.py) -- these tests care about the
+    # report row it builds, not that side effect, and leaving it real would
+    # spawn a task that outlives the test (it sleeps DEBOUNCE_SECONDS
+    # before doing anything real).
+    import app.services.ingestion_service as ingestion_module
+    monkeypatch.setattr(ingestion_module, "schedule_reprocess", MagicMock())
+
+
 @pytest.mark.asyncio
 async def test_ingest_citizen_message_populates_fields(monkeypatch):
     mock_session = AsyncMock()
