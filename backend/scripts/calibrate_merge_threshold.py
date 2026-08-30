@@ -31,16 +31,37 @@ def main() -> None:
         clusters = db.query(IssueCluster).all()
         regions_by_id = {r.id: r for r in db.query(AdminRegion).all()}
 
+        # Mirror clustering_engine.py's cluster_region_hint exactly: the
+        # engine never uses IssueCluster.region_id (the cluster's final,
+        # post-attribution region, which can come from an unreliable
+        # "just take the first ward" fallback) to decide which cluster pairs
+        # are region-related. It instead takes the majority region_id among
+        # the cluster's own member CitizenReport rows, with no fallback --
+        # a cluster with no report carrying a region_id is simply excluded.
+        # Using IssueCluster.region_id here would let this script validate a
+        # relatedness gate the engine doesn't actually use.
+        cluster_region_hint: dict[int, int] = {}
+        for c in clusters:
+            region_ids = [r.region_id for r in c.reports if r.region_id]
+            if region_ids:
+                cluster_region_hint[c.id] = max(set(region_ids), key=region_ids.count)
+
         pairs = []
+        nan_count = 0
         for i, a in enumerate(clusters):
+            if a.id not in cluster_region_hint:
+                continue
             for b in clusters[i + 1:]:
-                region_a, region_b = regions_by_id.get(a.region_id), regions_by_id.get(b.region_id)
+                if b.id not in cluster_region_hint:
+                    continue
+                region_a = regions_by_id.get(cluster_region_hint[a.id])
+                region_b = regions_by_id.get(cluster_region_hint[b.id])
                 if region_a is None or region_b is None:
                     continue
                 related = (
-                    a.region_id == b.region_id
-                    or region_a.parent_id == b.region_id
-                    or region_b.parent_id == a.region_id
+                    cluster_region_hint[a.id] == cluster_region_hint[b.id]
+                    or region_a.parent_id == cluster_region_hint[b.id]
+                    or region_b.parent_id == cluster_region_hint[a.id]
                 )
                 if not related:
                     continue
@@ -56,12 +77,25 @@ def main() -> None:
                     SELECT (a.c <=> b.c) FROM a, b WHERE a.c IS NOT NULL AND b.c IS NOT NULL;
                 """), {"a": tuple(report_ids_a), "b": tuple(report_ids_b)}).scalar()
 
-                if distance is not None:
-                    pairs.append((distance, a.id, a.title, b.id, b.title))
+                if distance is None:
+                    continue
+                if distance != distance:  # NaN check: a pgvector distance is
+                    # NaN when either side's averaged embedding involves a
+                    # zero-norm vector. list.sort() does not raise on NaN --
+                    # it silently corrupts ordering (NaN comparisons are
+                    # neither less-than nor greater-than), which can drag
+                    # otherwise-valid entries out of order too. Drop these
+                    # before sorting rather than let them through.
+                    nan_count += 1
+                    continue
+                pairs.append((distance, a.id, a.title, b.id, b.title))
 
         pairs.sort()
         for distance, id_a, title_a, id_b, title_b in pairs:
             print(f"{distance:.4f}  cluster {id_a} ({title_a!r})  <->  cluster {id_b} ({title_b!r})")
+
+        if nan_count:
+            print(f"{nan_count} pairs skipped: NaN distance (likely zero-norm embeddings)")
 
         if not pairs:
             print("No region-related cluster pairs found -- run process_and_prioritize on real data first.")

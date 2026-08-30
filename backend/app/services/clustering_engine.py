@@ -212,13 +212,23 @@ class ClusteringEngine:
             # which makes cosine distance undefined (NaN) for any pair
             # touching them -- 3 of the 4 pairs were unusable for that reason.
             # The one usable pair (water vs. electricity, same region) measured
-            # 0.1669, consistent with 0.15 as a cutoff but not proof of it --
-            # no genuine same-issue duplicate pair existed in this database to
-            # anchor the low end. Real calibration data was too sparse to move
-            # this threshold with confidence; re-run the script once more
-            # region-related duplicate reports exist in production.
+            # 0.1669 -- a different-sector pair, not a genuine duplicate -- only
+            # 0.017 above the previous 0.15 threshold. That margin is too thin
+            # to trust: this merge pass compares centroid-averaged embeddings
+            # (avg(embedding) per cluster), and averaging cancels per-report
+            # variance that would otherwise push distances further apart, so
+            # centroid distances are compressed relative to the report-level
+            # distances (~0.12 same-issue / ~0.42 unrelated) that originally
+            # justified numbers in this range. A false non-merge just leaves
+            # two clusters instead of one -- the pre-merge status quo. A false
+            # merge combines two distinct real issues into one evidence bundle
+            # and one policy brief a policymaker reads -- the wrong direction
+            # to be wrong in. Tightened to 0.10 as the conservative choice
+            # until a genuine same-issue duplicate pair exists in real data to
+            # anchor the low end; re-run the script once region-related
+            # duplicate reports exist in production.
             logger.info("Applying cross-bucket semantic merge...")
-            MERGE_DISTANCE_THRESHOLD = 0.15
+            MERGE_DISTANCE_THRESHOLD = 0.10
 
             cluster_region_hint: dict[int, int] = {}
             for c_idx, report_ids in cluster_map.items():
@@ -270,7 +280,16 @@ class ClusteringEngine:
 
                 # Determine dominant sector and average coordinates
                 sectors = [r.sector for r in reports]
-                dominant_sector = max(set(sectors), key=sectors.count)
+                # Tie-break alphabetically: the cross-bucket merge pass above
+                # makes exact sector-count ties routine (it specifically joins
+                # buckets with different sector tags), and plain `set`
+                # iteration order over strings is not guaranteed stable across
+                # process runs. dominant_sector drives the expenditure join and
+                # the DELIVERY_GAP indicator lookup below, so an unstable tie
+                # could flip a fiscal-gap figure between two runs of identical
+                # data -- deterministic tie-break keeps every figure traceable
+                # to a single, reproducible source.
+                dominant_sector = max(set(sectors), key=lambda s: (sectors.count(s), s))
                 
                 # Fetch spatial centroid
                 centroid_query = text("""
