@@ -203,8 +203,20 @@ class ClusteringEngine:
             # got separated by resolution noise -- a different sector tag, a
             # neighboring ward, or one path via GPS DBSCAN and the other via
             # the gazetteer -- rejoin, even when they're the same real-world
-            # report. Threshold calibrated against real Karnataka data in
-            # backend/scripts/calibrate_merge_threshold.py.
+            # report. Provisional threshold -- run against the real database
+            # via backend/scripts/calibrate_merge_threshold.py on 2026-08-30:
+            # of 56 clusters, only the most recent process_and_prioritize run's
+            # 7 clusters still had reports attached, yielding 4 region-related
+            # pairs, and 16 of the 24 embedded reports in this database turned
+            # out to have zero-norm (broken/placeholder) embedding vectors,
+            # which makes cosine distance undefined (NaN) for any pair
+            # touching them -- 3 of the 4 pairs were unusable for that reason.
+            # The one usable pair (water vs. electricity, same region) measured
+            # 0.1669, consistent with 0.15 as a cutoff but not proof of it --
+            # no genuine same-issue duplicate pair existed in this database to
+            # anchor the low end. Real calibration data was too sparse to move
+            # this threshold with confidence; re-run the script once more
+            # region-related duplicate reports exist in production.
             logger.info("Applying cross-bucket semantic merge...")
             MERGE_DISTANCE_THRESHOLD = 0.15
 
