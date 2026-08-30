@@ -197,6 +197,59 @@ class ClusteringEngine:
                     
             cluster_map = final_cluster_map
 
+            # Phase 2 (F5, continued): cross-bucket semantic merge. The split
+            # loop above only prevents *over*-merging inside a bucket that
+            # bucketing already put together; it never lets two buckets that
+            # got separated by resolution noise -- a different sector tag, a
+            # neighboring ward, or one path via GPS DBSCAN and the other via
+            # the gazetteer -- rejoin, even when they're the same real-world
+            # report. Threshold calibrated against real Karnataka data in
+            # backend/scripts/calibrate_merge_threshold.py.
+            logger.info("Applying cross-bucket semantic merge...")
+            MERGE_DISTANCE_THRESHOLD = 0.15
+
+            cluster_region_hint: dict[int, int] = {}
+            for c_idx, report_ids in cluster_map.items():
+                reports_for_hint = db.query(CitizenReport).filter(CitizenReport.id.in_(report_ids)).all()
+                region_ids = [r.region_id for r in reports_for_hint if r.region_id]
+                if region_ids:
+                    cluster_region_hint[c_idx] = max(set(region_ids), key=region_ids.count)
+
+            def _regions_are_related(region_a: int, region_b: int) -> bool:
+                if region_a == region_b:
+                    return True
+                ra = db.query(AdminRegion).get(region_a)
+                rb = db.query(AdminRegion).get(region_b)
+                if ra is None or rb is None:
+                    return False
+                return ra.parent_id == region_b or rb.parent_id == region_a
+
+            def _cluster_pair_distance(ids_a: list[int], ids_b: list[int]):
+                row = db.execute(text("""
+                    WITH a AS (SELECT avg(embedding) AS c FROM citizen_reports WHERE id IN :a AND embedding IS NOT NULL),
+                         b AS (SELECT avg(embedding) AS c FROM citizen_reports WHERE id IN :b AND embedding IS NOT NULL)
+                    SELECT (a.c <=> b.c) FROM a, b WHERE a.c IS NOT NULL AND b.c IS NOT NULL;
+                """), {"a": tuple(ids_a), "b": tuple(ids_b)}).scalar()
+                return row
+
+            merged_away = set()
+            cluster_indices = list(cluster_map.keys())
+            for i, idx_a in enumerate(cluster_indices):
+                if idx_a in merged_away or idx_a not in cluster_region_hint:
+                    continue
+                for idx_b in cluster_indices[i + 1:]:
+                    if idx_b in merged_away or idx_b not in cluster_region_hint:
+                        continue
+                    if not _regions_are_related(cluster_region_hint[idx_a], cluster_region_hint[idx_b]):
+                        continue
+                    distance = _cluster_pair_distance(cluster_map[idx_a], cluster_map[idx_b])
+                    if distance is not None and distance <= MERGE_DISTANCE_THRESHOLD:
+                        cluster_map[idx_a] = cluster_map[idx_a] + cluster_map[idx_b]
+                        merged_away.add(idx_b)
+
+            for idx in merged_away:
+                del cluster_map[idx]
+
             # 3. Create Issue Clusters
             for c_idx, report_ids in cluster_map.items():
                 reports = db.query(CitizenReport).filter(CitizenReport.id.in_(report_ids)).all()
