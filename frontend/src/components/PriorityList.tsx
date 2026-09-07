@@ -103,8 +103,8 @@ export default function PriorityList({ priorities, selectedId, onSelect, loading
                 {Boolean(p.details?.is_emerging_hotspot) && (
                   <span style={{
                     fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
-                    background: 'rgba(249,115,22,0.12)', color: '#f97316',
-                    border: '1px solid rgba(249,115,22,0.35)',
+                    background: 'rgba(6,182,212,0.12)', color: '#06b6d4',
+                    border: '1px solid rgba(6,182,212,0.35)',
                   }}>
                     🔥 Emerging
                   </span>
