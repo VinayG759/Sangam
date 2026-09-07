@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi.testclient import TestClient
 
@@ -21,13 +22,21 @@ def mock_db():
     
     mock_region_row = MagicMock()
     mock_region_row.first.return_value = (1,)
-    
+
+    # Hotspot clock query (SELECT now(), MIN(reported_at) ...) -- not what
+    # either test here exercises, so an oldest_report_at predating the
+    # window is enough to keep it out of the way.
+    mock_hotspot_clock = MagicMock()
+    mock_hotspot_clock.first.return_value = (datetime.utcnow(), datetime.utcnow() - timedelta(days=30))
+
     # Return mock values based on query
     def execute_side_effect(stmt, *args, **kwargs):
         if "ST_ClusterDBSCAN" in str(stmt):
             return mock_cluster_result
         elif "ST_Centroid" in str(stmt):
             return mock_centroid
+        elif "MIN(reported_at)" in str(stmt):
+            return mock_hotspot_clock
         elif "admin_regions" in str(stmt):
             return mock_region_row
         return MagicMock()

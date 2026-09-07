@@ -30,15 +30,27 @@ HOTSPOT_MIN_RECENT_REPORTS = 3
 HOTSPOT_ACCELERATION_RATIO = 2.0
 
 
-def _is_emerging_hotspot(reports) -> bool:
+def _is_emerging_hotspot(reports: list, now: datetime, oldest_report_at) -> bool:
     """
     Flags a cluster whose complaint RATE is accelerating, not just large --
     a time-windowed comparison on report timestamps already collected, so a
     problem surfaces before it has accumulated enough total volume to
     already rank highly on score alone. Deterministic arithmetic, no model
     call, consistent with this project's model-free scoring philosophy.
+
+    `now` and `oldest_report_at` are sourced from the database's own clock
+    (Postgres `now()`/`MIN(reported_at)`), not the app process's
+    datetime.utcnow() -- reported_at is written by Postgres via func.now(),
+    and comparing it against a Python-clock timestamp is only safe if the
+    two processes agree on timezone, which nothing in this deployment
+    currently pins.
+
+    `oldest_report_at` gates the zero-prior-reports branch: a cluster with
+    no prior reports because the WHOLE DATASET has no history predating the
+    window (a fresh deployment, a newly imported region) must not be
+    indistinguishable from a genuinely new hotspot -- otherwise every
+    cluster in a young dataset reads as "emerging."
     """
-    now = datetime.utcnow()
     recent_cutoff = now - timedelta(days=HOTSPOT_WINDOW_DAYS)
     prior_cutoff = now - timedelta(days=HOTSPOT_WINDOW_DAYS * 2)
 
@@ -51,7 +63,9 @@ def _is_emerging_hotspot(reports) -> bool:
     if recent_count < HOTSPOT_MIN_RECENT_REPORTS:
         return False
     if prior_count == 0:
-        return True
+        # Only a real signal if the dataset itself has history predating the
+        # window -- otherwise "no prior reports" just means "no data yet."
+        return oldest_report_at is not None and oldest_report_at < recent_cutoff
     return (recent_count / prior_count) >= HOTSPOT_ACCELERATION_RATIO
 
 
@@ -71,6 +85,13 @@ class ClusteringEngine:
             db.commit()
             db.refresh(run)
             run_id = run.id
+
+            # Sourced from the database's own clock, once per run -- see
+            # _is_emerging_hotspot's docstring for why this can't be
+            # datetime.utcnow(). One query regardless of cluster count.
+            hotspot_now, oldest_report_at = db.execute(
+                text("SELECT now(), MIN(reported_at) FROM citizen_reports")
+            ).first()
 
             # Phase 18: Re-attempt Gemini for pending_analysis reports
             logger.info("Retrying Gemini analysis for pending reports...")
@@ -487,7 +508,7 @@ class ClusteringEngine:
                     delivery_rate=delivery_rate,
                     delivery_reference=delivery_reference,
                 )
-                score_details["is_emerging_hotspot"] = _is_emerging_hotspot(reports)
+                score_details["is_emerging_hotspot"] = _is_emerging_hotspot(reports, hotspot_now, oldest_report_at)
 
                 fully_funded = allocated_budget >= estimated_cost
                 if len(reports) < 3 and not stalled_status and not fully_funded:

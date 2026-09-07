@@ -26,6 +26,13 @@ def mock_db_for_split(monkeypatch):
     row3 = MagicMock(); row3.id = 3; row3.distance = 0.4
     mock_split_result.fetchall.return_value = [row1, row2, row3]
     
+    # Emerging-hotspot "now"/"oldest" query: a now that predates nothing and
+    # an oldest_report_at well before the window, so this fixture's own
+    # is_emerging_hotspot assertions stay meaningful (cold-start gate is
+    # open; the recent-count minimum is what's actually under test).
+    mock_hotspot_clock = MagicMock()
+    mock_hotspot_clock.first.return_value = (datetime.utcnow(), datetime.utcnow() - timedelta(days=30))
+
     def execute_side_effect(stmt, *args, **kwargs):
         stmt_str = str(stmt)
         if "ST_ClusterDBSCAN" in stmt_str:
@@ -34,14 +41,19 @@ def mock_db_for_split(monkeypatch):
             return mock_split_result
         elif "ST_Centroid" in stmt_str:
             return mock_centroid
+        elif "MIN(reported_at)" in stmt_str:
+            return mock_hotspot_clock
         return MagicMock()
-        
+
     db.execute.side_effect = execute_side_effect
-    
+
     citizen_report_query_mock = MagicMock()
-    report1 = CitizenReport(id=1, sector="water", urgency_score=5)
-    report2 = CitizenReport(id=2, sector="water", urgency_score=5)
-    report3 = CitizenReport(id=3, sector="water", urgency_score=5)
+    # Recent (1 day old) but below HOTSPOT_MIN_RECENT_REPORTS (3) for the
+    # 2-report cluster below -- exercises the real is_emerging_hotspot
+    # computation rather than a value the fixture can't actually verify.
+    report1 = CitizenReport(id=1, sector="water", urgency_score=5, reported_at=datetime.utcnow() - timedelta(days=1))
+    report2 = CitizenReport(id=2, sector="water", urgency_score=5, reported_at=datetime.utcnow() - timedelta(days=1))
+    report3 = CitizenReport(id=3, sector="water", urgency_score=5, reported_at=datetime.utcnow() - timedelta(days=1))
     citizen_report_query_mock.filter.return_value.all.side_effect = [
         [], # pending_reports
         [], # gazetteer_reports
@@ -137,6 +149,10 @@ def test_clustering_engine_retries_pending_reports(monkeypatch):
     db.query.side_effect = query_side_effect
 
     db.execute.return_value.fetchall.return_value = [] # no spatial clusters
+    # Hotspot clock query (SELECT now(), MIN(reported_at) ...) -- this test
+    # never reaches the clusters loop (no spatial or gazetteer clusters), so
+    # the exact values don't matter, only that unpacking succeeds.
+    db.execute.return_value.first.return_value = (datetime.utcnow(), None)
 
     class MockGemini:
         def analyze_citizen_report(self, text_content, audio_bytes, mime_type):
@@ -175,6 +191,9 @@ def _make_mock_db_for_merge(merge_distance: float, region2_parent_id, will_merge
     mock_centroid = MagicMock()
     mock_centroid.scalar.return_value = "POINT(0 0)"
 
+    mock_hotspot_clock = MagicMock()
+    mock_hotspot_clock.first.return_value = (datetime.utcnow(), datetime.utcnow() - timedelta(days=30))
+
     def execute_side_effect(stmt, params=None, *args, **kwargs):
         stmt_str = str(stmt)
         if "ST_ClusterDBSCAN" in stmt_str:
@@ -193,6 +212,8 @@ def _make_mock_db_for_merge(merge_distance: float, region2_parent_id, will_merge
             return result
         if "ST_Centroid" in stmt_str:
             return mock_centroid
+        if "MIN(reported_at)" in stmt_str:
+            return mock_hotspot_clock
         return MagicMock()
 
     db.execute.side_effect = execute_side_effect
@@ -318,31 +339,53 @@ def _report_at(days_ago: float) -> MagicMock:
 def test_is_emerging_hotspot_true_when_recent_rate_accelerates():
     # 3 reports in the last 7 days, 1 report 7-14 days ago -> ratio 3.0, >= 2.0.
     reports = [_report_at(1), _report_at(2), _report_at(3), _report_at(9)]
-    assert _is_emerging_hotspot(reports) is True
+    now = datetime.utcnow()
+    oldest_report_at = now - timedelta(days=30)
+    assert _is_emerging_hotspot(reports, now, oldest_report_at) is True
 
 
 def test_is_emerging_hotspot_false_when_below_minimum_recent_count():
     # Only 2 recent reports -- below the minimum of 3, regardless of ratio.
     reports = [_report_at(1), _report_at(2)]
-    assert _is_emerging_hotspot(reports) is False
+    now = datetime.utcnow()
+    oldest_report_at = now - timedelta(days=30)
+    assert _is_emerging_hotspot(reports, now, oldest_report_at) is False
 
 
 def test_is_emerging_hotspot_false_when_rate_not_accelerating():
     # 3 recent, 3 prior -> ratio 1.0, below the 2.0 threshold.
     reports = [_report_at(1), _report_at(2), _report_at(3), _report_at(8), _report_at(9), _report_at(10)]
-    assert _is_emerging_hotspot(reports) is False
+    now = datetime.utcnow()
+    oldest_report_at = now - timedelta(days=30)
+    assert _is_emerging_hotspot(reports, now, oldest_report_at) is False
 
 
 def test_is_emerging_hotspot_true_when_all_new_with_no_prior_activity():
     # 3 recent, 0 prior -- brand-new activity is itself the strongest signal
-    # (and avoids a division by zero).
+    # (and avoids a division by zero) -- but only because the dataset has
+    # history predating the window, so "0 prior" is a real signal and not
+    # just "no data yet."
     reports = [_report_at(1), _report_at(2), _report_at(3)]
-    assert _is_emerging_hotspot(reports) is True
+    now = datetime.utcnow()
+    oldest_report_at = now - timedelta(days=30)
+    assert _is_emerging_hotspot(reports, now, oldest_report_at) is True
+
+
+def test_is_emerging_hotspot_false_when_dataset_has_no_history_yet():
+    # Same reports as the all-new test (3 recent, 0 prior), but the dataset
+    # itself has no history older than the window -- a fresh deployment or
+    # newly imported region, not a genuine emerging hotspot.
+    reports = [_report_at(1), _report_at(2), _report_at(3)]
+    now = datetime.utcnow()
+    oldest_report_at = now - timedelta(days=2)
+    assert _is_emerging_hotspot(reports, now, oldest_report_at) is False
 
 
 def test_is_emerging_hotspot_false_when_reports_missing_timestamp():
     reports = [MagicMock(reported_at=None), MagicMock(reported_at=None), MagicMock(reported_at=None)]
-    assert _is_emerging_hotspot(reports) is False
+    now = datetime.utcnow()
+    oldest_report_at = now - timedelta(days=30)
+    assert _is_emerging_hotspot(reports, now, oldest_report_at) is False
 
 
 def test_priority_details_include_emerging_hotspot_flag(mock_db_for_split):
@@ -350,6 +393,13 @@ def test_priority_details_include_emerging_hotspot_flag(mock_db_for_split):
 
     priorities = [obj for obj in mock_db_for_split.added_objects if isinstance(obj, Priority)]
 
+    # Every cluster in this fixture has fewer than HOTSPOT_MIN_RECENT_REPORTS
+    # (3) recent reports -- the split produces one cluster of 2 reports and
+    # one of 1 -- even though report1/2/3 all carry a recent reported_at.
+    # This exercises the real is_emerging_hotspot computation (not just key
+    # presence): if the flag were hardcoded True, or the recent-count gate
+    # were broken, this assertion would catch it.
     assert priorities
     for p in priorities:
         assert "is_emerging_hotspot" in p.details
+        assert p.details["is_emerging_hotspot"] is False
