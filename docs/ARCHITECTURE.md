@@ -7,7 +7,7 @@ https://claude.ai/code/artifact/ab991d55-d4c5-4c17-86e5-53449719f3db
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 
-Published 16 Aug 2026 · v1.0 · private artifact (share from the page's share menu)
+Published 16 Aug 2026 · v1.1 (updated 25 Aug 2026 — Phase 2 addendum) · private artifact (share from the page's share menu)
 
 ---
 
@@ -47,6 +47,7 @@ surfaces two findings no complaint tracker can produce:
 | 14 | Repository tree |
 | 15 | Build sequence |
 | 16 | Risk register |
+| 17 | Phase 2: production hardening — added 25 Aug 2026 |
 
 ## Load-bearing decisions
 
@@ -62,15 +63,37 @@ surfaces two findings no complaint tracker can produce:
 ## Key dates
 
 - **16 Aug 2026** — build starts (day 1)
-- **23 Aug 2026** — target submission
-- **24 Aug 2026** — deadline (buffer only, nothing planned)
-- **29 Aug 2026** — virtual finale, top 20
-- **4 Sep 2026** — in-person Demo Day
+- **24 Aug 2026** — MVP build window ends (original deadline, now superseded)
+- **30 Sep 2026** — **actual submission deadline** (extended)
+- Shortlist of top 20 teams — TBA
+- **October 2026** — in-person finale, New Delhi (exact date TBA)
+
+## Phase 2 — production hardening (added 25 Aug 2026)
+
+The deadline extension is being spent closing three gaps the MVP already
+knew about (§1's status note, §17) rather than on unrelated scope:
+
+- **F5** — cross-lingual clustering is currently exact `region + sector`
+  match; embeddings already exist on every report but aren't used for
+  matching yet. Phase 2 wires them in.
+- **F10** — briefing export (`/v1/export/{id}.pdf`) was speced, never built.
+- **F11/N5** — "switching country needs zero code" is architecturally true
+  but has only ever run with one pack loaded. Phase 2 proves it live with a
+  second state pack.
+
+Plus new capabilities: native GPS location sharing + confidence-gated
+confirmation (closes the real "Yelahanka" → "Alanka" STT failure found in
+live testing — see §16's revisited Risk 2), emerging-hotspot detection,
+auth + a policymaker workspace. Gemini moves to a paid tier only in the
+final week before testing, to lift the free-tier RPM ceiling — not before,
+so nothing through the build depends on a purchase that hasn't happened.
+Full detail in §17 of the design doc.
 
 ## Stack
 
 Python / FastAPI · Supabase (Postgres + pgvector + PostGIS) · Gemini API
-(free tier, AI Studio) · React + Leaflet · Render + Vercel · Apache-2.0
+(free tier through the build; paid tier from the final week — see Phase 2
+above) · React + Leaflet · Render + Vercel · Apache-2.0
 
 > Keep this file pointing at the current version of the design. If the
 > architecture changes, update the artifact rather than letting it rot.
