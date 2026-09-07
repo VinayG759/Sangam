@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from app.models.models import CitizenReport, Expenditure, AdminRegion, IssueCluster, Priority, EvidenceBundle, NarrativeBrief, Indicator, AnalysisRun
@@ -18,6 +19,41 @@ logger = logging.getLogger(__name__)
 SECTOR_DELIVERY_INDICATOR = {
     "water": "water.piped_household_pct",
 }
+
+# Time-windowed velocity thresholds for emerging-hotspot detection (F14,
+# docs/superpowers/plans/2026-09-07-emerging-hotspot-detection.md). Flags a
+# RATE change, not a total-volume threshold -- a cluster with 3 reports this
+# week and 0 last week is worth surfacing even if a 40-report cluster still
+# outranks it on raw score.
+HOTSPOT_WINDOW_DAYS = 7
+HOTSPOT_MIN_RECENT_REPORTS = 3
+HOTSPOT_ACCELERATION_RATIO = 2.0
+
+
+def _is_emerging_hotspot(reports) -> bool:
+    """
+    Flags a cluster whose complaint RATE is accelerating, not just large --
+    a time-windowed comparison on report timestamps already collected, so a
+    problem surfaces before it has accumulated enough total volume to
+    already rank highly on score alone. Deterministic arithmetic, no model
+    call, consistent with this project's model-free scoring philosophy.
+    """
+    now = datetime.utcnow()
+    recent_cutoff = now - timedelta(days=HOTSPOT_WINDOW_DAYS)
+    prior_cutoff = now - timedelta(days=HOTSPOT_WINDOW_DAYS * 2)
+
+    recent_count = sum(1 for r in reports if r.reported_at and r.reported_at >= recent_cutoff)
+    prior_count = sum(
+        1 for r in reports
+        if r.reported_at and prior_cutoff <= r.reported_at < recent_cutoff
+    )
+
+    if recent_count < HOTSPOT_MIN_RECENT_REPORTS:
+        return False
+    if prior_count == 0:
+        return True
+    return (recent_count / prior_count) >= HOTSPOT_ACCELERATION_RATIO
+
 
 class ClusteringEngine:
     """
@@ -451,6 +487,7 @@ class ClusteringEngine:
                     delivery_rate=delivery_rate,
                     delivery_reference=delivery_reference,
                 )
+                score_details["is_emerging_hotspot"] = _is_emerging_hotspot(reports)
 
                 fully_funded = allocated_budget >= estimated_cost
                 if len(reports) < 3 and not stalled_status and not fully_funded:

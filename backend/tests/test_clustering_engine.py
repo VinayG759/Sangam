@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
-from app.services.clustering_engine import clustering_engine
+from datetime import datetime, timedelta
+from app.services.clustering_engine import clustering_engine, _is_emerging_hotspot
 from app.models.models import CitizenReport, IssueCluster, AnalysisRun, Priority, AdminRegion
 
 @pytest.fixture
@@ -308,3 +309,47 @@ def test_cross_bucket_merge_skips_when_regions_unrelated(mock_db_for_merge_unrel
     # merge just because the text reads similarly; two clusters expected.
     assert len(clusters) == 2
     assert sorted(c.report_count for c in clusters) == [2, 2]
+
+
+def _report_at(days_ago: float) -> MagicMock:
+    return MagicMock(reported_at=datetime.utcnow() - timedelta(days=days_ago))
+
+
+def test_is_emerging_hotspot_true_when_recent_rate_accelerates():
+    # 3 reports in the last 7 days, 1 report 7-14 days ago -> ratio 3.0, >= 2.0.
+    reports = [_report_at(1), _report_at(2), _report_at(3), _report_at(9)]
+    assert _is_emerging_hotspot(reports) is True
+
+
+def test_is_emerging_hotspot_false_when_below_minimum_recent_count():
+    # Only 2 recent reports -- below the minimum of 3, regardless of ratio.
+    reports = [_report_at(1), _report_at(2)]
+    assert _is_emerging_hotspot(reports) is False
+
+
+def test_is_emerging_hotspot_false_when_rate_not_accelerating():
+    # 3 recent, 3 prior -> ratio 1.0, below the 2.0 threshold.
+    reports = [_report_at(1), _report_at(2), _report_at(3), _report_at(8), _report_at(9), _report_at(10)]
+    assert _is_emerging_hotspot(reports) is False
+
+
+def test_is_emerging_hotspot_true_when_all_new_with_no_prior_activity():
+    # 3 recent, 0 prior -- brand-new activity is itself the strongest signal
+    # (and avoids a division by zero).
+    reports = [_report_at(1), _report_at(2), _report_at(3)]
+    assert _is_emerging_hotspot(reports) is True
+
+
+def test_is_emerging_hotspot_false_when_reports_missing_timestamp():
+    reports = [MagicMock(reported_at=None), MagicMock(reported_at=None), MagicMock(reported_at=None)]
+    assert _is_emerging_hotspot(reports) is False
+
+
+def test_priority_details_include_emerging_hotspot_flag(mock_db_for_split):
+    clustering_engine.process_and_prioritize(mock_db_for_split)
+
+    priorities = [obj for obj in mock_db_for_split.added_objects if isinstance(obj, Priority)]
+
+    assert priorities
+    for p in priorities:
+        assert "is_emerging_hotspot" in p.details
