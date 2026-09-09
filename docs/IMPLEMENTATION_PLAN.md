@@ -1039,6 +1039,142 @@ skip for the hackathon.
 and accepts the right one; confirm webhook routes are unaffected (Telegram
 and Twilio can't be given a token).
 
+**Superseded, 9 Sep 2026**: the shared-token idea above was written before
+the deadline extension to 30 Sep gave real runway. Decided instead on real
+per-official login via Clerk (`docs/superpowers/plans/2026-08-25-clerk-auth-foundation.md`)
+so saved scenarios, exports, and an audit trail (F15) have a real user to
+attach to. Blocked on Vinay creating a Clerk app; not yet built.
+
+---
+
+### Phase 23: GPS Location Capture & Confidence-Gated Location Confirmation (F12/F13)
+
+**Why**: Reproduced live, 23 Aug 2026 -- a citizen said "Yelahanka" in a
+Telegram voice note; Gemini's transcription mis-heard it as "Alanka."
+`resolve_location` correctly found nothing close enough to auto-accept
+(fuzzy score under the 85 threshold) and the report saved with no location
+at all -- no chance to confirm or correct it. Two independent, real fixes,
+both speced in the design doc §17:
+
+- **F12 -- native GPS sharing.** Telegram and WhatsApp both support a
+  built-in "share location" message. Neither adapter handles it today. A
+  citizen sharing GPS bypasses transcription and spelling entirely.
+- **F13 -- confidence-gated confirmation.** Today `resolve_location`
+  collapses "no match" and "weak match" into the same `None` -- a plausible
+  but not-quite-safe guess (say, score 70) is silently discarded exactly
+  like total nonsense. It should instead ask one yes/no question ("Did you
+  mean Yelahanka?"), reusing the same one-follow-up-question budget F3
+  already spends on a *missing* location.
+
+**Design**:
+
+- `location_resolver.py` gains `resolve_location_with_confidence(text, country_code, db) -> tuple[AdminRegion | None, str]`, returning confidence `"exact"` (name/variant match, or fuzzy score >= 85 -- unchanged bar), `"low"` (fuzzy score in `[65, 85)` -- new), or `"none"`. The existing `resolve_location()` becomes a one-line wrapper delegating to it and keeping its old behavior exactly (only `"exact"` counts) -- every existing caller is unaffected unless explicitly upgraded.
+- `location_resolver.py` gains `resolve_gps_location(latitude, longitude, country_code, db) -> AdminRegion | None`, matching on `ST_Distance(centroid, ST_SetSRID(ST_MakePoint(lon, lat), 4326))` ascending, `LIMIT 1`, restricted to regions where `centroid IS NOT NULL`. **Must use `centroid`, not `geom`** -- real boundary polygons aren't populated for Karnataka data yet, only centroids (via `admin_centroids.csv`).
+- `ingestion_service.py` calls the confidence-aware resolver. `"low"` confidence no longer falls into the existing `needs_location_followup` path -- it creates a `PendingIntake` with a new `awaiting = "location_confirmation"` value (no schema change needed, `awaiting` is already a free-text column) and `partial_report["candidate_region_id"]` set to the weak match's id. The return dict gains `needs_location_confirmation: bool` and `location_confirmation_candidate_name: str | None`.
+- Both channel adapters (`telegram_adapter.py`, `whatsapp_adapter.py` -- kept as parallel independent copies, matching this codebase's existing convention rather than sharing logic through a new abstraction) gain:
+  - A `location` message handler, checked before the existing text-based `awaiting == "location"` block: if a `PendingIntake` exists (`awaiting` in `("location", "location_confirmation")`), resolve via `resolve_gps_location` and commit directly -- GPS always wins over any pending text-based flow. If no pending intake exists, reply asking the citizen to also describe the issue (GPS alone has nothing for Gemini to analyze).
+  - A new `awaiting == "location_confirmation"` branch: if the reply text is an affirmative word (`{"yes","y","yeah","yep","yup","correct","confirm","ok","okay","ha","haan","ho"}`, case-insensitive), commit the candidate region. Otherwise, try the reply as a *fresh* location guess via the existing `resolve_location` (auto-accept only -- no second confirmation round, keeping F3's one-question rule), and if that also fails, fall through to normal ingestion as a new report (same "don't discard unrelated content" pattern already used for the plain `"location"` state).
+  - The final reply-building block gains a `needs_location_confirmation` branch (checked before `needs_location_followup`): `"Did you mean {candidate_name}? Reply YES to confirm, or send the correct ward/area name."`
+
+**Exact new functions for `location_resolver.py`** (the highest-risk part --
+exact SQL and exact threshold logic, spelled out so nothing is left to
+guess):
+
+```python
+# Below this score, a fuzzy match is not even worth suggesting.
+FUZZY_SUGGEST_THRESHOLD = 65
+# At or above this score, a fuzzy match is safe to accept automatically.
+# Unchanged from the original single-threshold design.
+FUZZY_AUTO_ACCEPT_THRESHOLD = 85
+
+
+async def resolve_location_with_confidence(
+    location_text_latin: str, country_code: str, db: AsyncSession
+) -> tuple[AdminRegion | None, str]:
+    """
+    Like resolve_location, but distinguishes a confident match from a weak
+    one instead of collapsing both non-matches into a single None.
+    Returns (region, confidence): "exact" (safe to auto-accept, same bar
+    as before), "low" (fuzzy score 65-84 -- ask the citizen to confirm,
+    F13), or "none" (region is None).
+    """
+    if not location_text_latin:
+        return None, "none"
+
+    stmt = select(AdminRegion).where(AdminRegion.country_code == country_code)
+    result = await db.execute(stmt)
+    regions = result.scalars().all()
+    if not regions:
+        return None, "none"
+
+    query = location_text_latin.strip().lower()
+
+    for region in regions:
+        if region.name.strip().lower() == query:
+            return region, "exact"
+        if region.name_variants:
+            variants = [v.strip().lower() for v in region.name_variants.split('|')]
+            if query in variants:
+                return region, "exact"
+
+    choices = []
+    region_map = {}
+    for region in regions:
+        names_to_match = [region.name]
+        if region.name_variants:
+            names_to_match.extend(region.name_variants.split('|'))
+        for name in names_to_match:
+            clean_name = name.strip()
+            if clean_name:
+                lowered = clean_name.lower()
+                choices.append(lowered)
+                region_map[lowered] = region
+    if not choices:
+        return None, "none"
+
+    match = process.extractOne(query, choices, scorer=fuzz.WRatio)
+    if not match:
+        return None, "none"
+
+    best_str, score, _index = match
+    if score >= FUZZY_AUTO_ACCEPT_THRESHOLD:
+        return region_map[best_str], "exact"
+    if score >= FUZZY_SUGGEST_THRESHOLD:
+        return region_map[best_str], "low"
+    return None, "none"
+
+
+async def resolve_location(location_text_latin: str, country_code: str, db: AsyncSession) -> AdminRegion | None:
+    """Thin wrapper: only "exact" confidence counts, matching old behavior."""
+    region, confidence = await resolve_location_with_confidence(location_text_latin, country_code, db)
+    return region if confidence == "exact" else None
+
+
+async def resolve_gps_location(
+    latitude: float, longitude: float, country_code: str, db: AsyncSession
+) -> AdminRegion | None:
+    """
+    Nearest region by centroid distance -- AdminRegion.geom (real boundary
+    polygons) is NOT populated for Karnataka data yet, only .centroid is.
+    """
+    stmt = text("""
+        SELECT id FROM admin_regions
+        WHERE country_code = :country_code AND centroid IS NOT NULL
+        ORDER BY ST_Distance(centroid, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)) ASC
+        LIMIT 1;
+    """)
+    result = await db.execute(stmt, {"country_code": country_code, "lon": longitude, "lat": latitude})
+    row = result.first()
+    if not row:
+        return None
+    region_result = await db.execute(select(AdminRegion).where(AdminRegion.id == row[0]))
+    return region_result.scalar_one_or_none()
+```
+
+**Build order**: `location_resolver.py` first (both new functions, `resolve_location`'s behavior must stay provably unchanged) → `ingestion_service.py` (wires confidence through) → `telegram_adapter.py` → `whatsapp_adapter.py` (mirrors Telegram).
+
+**Verification**: `resolve_location`'s 5 existing tests in `test_location_resolver.py` must still pass unchanged after the refactor (proves the delegation didn't change its behavior). New tests needed: a mocked mid-range fuzzy score (e.g. 70) returns `"low"` with a region, not `None`; a mocked high score (90) and low score (50) return `"exact"`/`"none"` respectively; a GPS point resolves to the nearest region by centroid distance (mock two sequential `db.execute` calls -- the nearest-id query, then the region lookup); a GPS location message arriving during a pending intake commits directly without any text resolution and takes priority over both `"location"` and `"location_confirmation"` pending states; an affirmative reply (`"yes"`, `"haan"`, etc.) during `"location_confirmation"` commits the candidate region; a non-affirmative reply that also fails to resolve via a fresh guess falls through to ingestion as a new report rather than being discarded (same pattern the existing `"location"` state already uses); the final reply-building block asks "Did you mean X?" when `needs_location_confirmation` is set, before the existing `needs_location_followup` check.
+
 ### Phase 22: Small Fixes — Media Size Limit & Pack Validator CLI
 
 Two independent, small items:
