@@ -54,3 +54,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+.gstack/
