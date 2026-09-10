@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -9,6 +9,7 @@ from app.models.models import Priority, IssueCluster, AdminRegion, CitizenReport
 from app.services.simulation_engine import simulation_engine
 from app.services.gemini_service import gemini_service
 from app.services.clustering_engine import clustering_engine
+from app.services.pdf_export import render_briefing_pdf
 from app.schemas import CitizenIngestResponse
 from pydantic import BaseModel
 
@@ -126,6 +127,64 @@ async def get_priority_detail(priority_id: int, db: AsyncSession = Depends(get_d
             "recommended_action": p.narrative_brief.recommended_action if p.narrative_brief else "No recommendation."
         }
     }
+
+@router.get("/export/{priority_id}.pdf")
+async def export_priority_pdf(priority_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Exports a government-ready PDF briefing note for a priority recommendation.
+    """
+    from app.services.run_service import get_latest_complete_run_id_async
+    run_id = await get_latest_complete_run_id_async(db)
+    if run_id is None:
+        raise HTTPException(status_code=404, detail="No analysis has completed yet.")
+
+    result = await db.execute(
+        select(Priority)
+        .where(Priority.id == priority_id, Priority.run_id == run_id)
+        .options(
+            selectinload(Priority.evidence_bundle),
+            selectinload(Priority.narrative_brief),
+            selectinload(Priority.cluster).selectinload(IssueCluster.region)
+        )
+    )
+    p = result.scalar_one_or_none()
+
+    if not p or (p.details and p.details.get("suppressed", False)):
+        raise HTTPException(status_code=404, detail="Priority record not found")
+
+    evidence_data = p.evidence_bundle.data if p.evidence_bundle else {}
+    brief_data = {
+        "summary": p.narrative_brief.summary if p.narrative_brief else "Brief missing.",
+        "why_prioritized": p.narrative_brief.why_prioritized if p.narrative_brief else "Not analyzed.",
+        "fiscal_gap_analysis": p.narrative_brief.fiscal_gap_analysis if p.narrative_brief else "No gap analysis.",
+        "recommended_action": p.narrative_brief.recommended_action if p.narrative_brief else "No recommendation."
+    }
+
+    region_name = None
+    sector = None
+    report_count = 0
+    if p.cluster:
+        sector = p.cluster.sector
+        report_count = getattr(p.cluster, "report_count", 0)
+        if p.cluster.region:
+            region_name = p.cluster.region.name
+
+    priority_dict = {
+        "id": p.id,
+        "score": p.score,
+        "verdict": p.verdict,
+        "region_name": region_name,
+        "sector": sector,
+        "report_count": report_count
+    }
+
+    pdf_bytes = render_briefing_pdf(priority_dict, evidence_data, brief_data)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="briefing_{priority_id}.pdf"'}
+    )
 
 @router.post("/simulate")
 async def run_simulation(req: SimulationRequest, db: AsyncSession = Depends(get_db)):
