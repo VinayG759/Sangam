@@ -72,6 +72,17 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
         file_id = photo[-1].get("file_id")
         mime_type = "image/jpeg"
         
+    MAX_MEDIA_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+    reported_size = (voice.get("file_size") if voice else None) or (photo[-1].get("file_size") if photo and isinstance(photo, list) and len(photo) > 0 else None)
+    if reported_size and reported_size > MAX_MEDIA_SIZE_BYTES:
+        await _send_telegram_message(
+            chat_id,
+            "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+            bot_token
+        )
+        return
+
     if file_id:
         # Download media file
         try:
@@ -82,6 +93,14 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
                     if resp.status == 200:
                         file_data = await resp.json()
                         file_path = file_data.get("result", {}).get("file_path")
+                        file_size_res = file_data.get("result", {}).get("file_size")
+                        if file_size_res and file_size_res > MAX_MEDIA_SIZE_BYTES:
+                            await _send_telegram_message(
+                                chat_id,
+                                "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+                                bot_token
+                            )
+                            return
                         
                         if file_path:
                             # Download actual file
@@ -92,6 +111,14 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
         except Exception as e:
             logger.error(f"Failed to download Telegram media: {e}")
             await _send_telegram_message(chat_id, "Sorry, I couldn't download your media. Please try again or send a text message.", bot_token)
+            return
+
+        if audio_bytes and len(audio_bytes) > MAX_MEDIA_SIZE_BYTES:
+            await _send_telegram_message(
+                chat_id,
+                "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+                bot_token
+            )
             return
 
     tg_loc = message.get("location")

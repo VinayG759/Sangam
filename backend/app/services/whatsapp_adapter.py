@@ -97,6 +97,8 @@ async def handle_whatsapp_update(payload: Dict[str, Any], db: AsyncSession) -> N
     elif msg_type == "image":
         media_id = message.get("image", {}).get("id")
 
+    MAX_MEDIA_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
     if media_id:
         try:
             audio_bytes, mime_type = await _download_meta_media(media_id, access_token)
@@ -105,6 +107,15 @@ async def handle_whatsapp_update(payload: Dict[str, Any], db: AsyncSession) -> N
             audio_bytes = None
         if audio_bytes is None:
             await _send_whatsapp_message(from_number, "Sorry, I couldn't download your media. Please try again or send a text message.", access_token, phone_number_id)
+            return
+
+        if len(audio_bytes) > MAX_MEDIA_SIZE_BYTES:
+            await _send_whatsapp_message(
+                from_number,
+                "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+                access_token,
+                phone_number_id
+            )
             return
 
     # Check for pending intake first

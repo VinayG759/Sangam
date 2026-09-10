@@ -274,6 +274,11 @@ async def ingest_citizen_report(
     if file:
         audio_bytes = await file.read()
         mime_type = file.content_type
+        if audio_bytes and len(audio_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="The media file is too large (maximum size is 10 MB)."
+            )
 
     result = await ingest_citizen_message(
         db=db,

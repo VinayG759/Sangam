@@ -69,6 +69,17 @@ async def ingest_citizen_message(
     if latitude is not None and longitude is not None:
         location_wkt = f"SRID=4326;POINT({longitude} {latitude})"
 
+    # Phase 22: Media size limit (10 MB)
+    if audio_bytes and len(audio_bytes) > 10 * 1024 * 1024:
+        return {
+            "status": "rejected",
+            "message": "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+            "report_id": None,
+            "tracking_id": None,
+            "needs_location_followup": False,
+            "needs_location_confirmation": False
+        }
+
     analysis = {}
     embedding = None
     english_translation = ""
