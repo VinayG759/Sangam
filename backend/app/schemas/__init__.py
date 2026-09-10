@@ -94,8 +94,11 @@ class CitizenIngestResponse(BaseModel):
     status: str
     report_id: int
     tracking_id: str
-    analysis_extracted: CitizenReportAnalysisResponse
-    needs_location_followup: bool
+    analysis_extracted: Optional[CitizenReportAnalysisResponse] = None
+    needs_location_followup: bool = False
+    needs_location_confirmation: Optional[bool] = False
+    candidate_region_name: Optional[str] = None
+
 
 
 # ─── Simulation ─────────────────────────────────────────────────────────────────
