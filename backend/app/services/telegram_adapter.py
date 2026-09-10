@@ -250,7 +250,11 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
 
         result = await ingest_citizen_message(**ingest_kwargs)
 
-        
+        if result.get("status") in ("rejected", "rate_limited"):
+            reply_text = result.get("message") or "Maximum reports for today reached. Please try again tomorrow."
+            await _send_telegram_message(chat_id, reply_text, bot_token)
+            return
+
         tracking_id = result["tracking_id"]
         if result.get("needs_location_confirmation"):
             candidate = result.get("candidate_region_name") or "detected area"

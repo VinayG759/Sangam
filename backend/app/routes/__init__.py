@@ -13,7 +13,7 @@ from app.routes.expenditures import router as expenditures_router
 from app.routes.clusters import router as clusters_router
 from app.routes.pack import router as pack_router
 from app.routes.webhooks import router as webhooks_router
-from app.routes.admin import router as admin_router
+from app.routes.admin import router as admin_router, admin_compat_router
 
 # Ordered list of all API route groups
 all_routers = [
@@ -26,4 +26,5 @@ all_routers = [
     pack_router,
     webhooks_router,
     admin_router,
+    admin_compat_router,
 ]

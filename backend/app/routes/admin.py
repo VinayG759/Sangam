@@ -46,3 +46,40 @@ async def get_admin_runs(
         }
         for r in runs
     ]
+
+
+@router.get("/flagged")
+async def get_flagged_reports(
+    db: AsyncSession = Depends(get_db),
+    authorized: bool = Depends(verify_admin_token)
+):
+    """
+    Returns list of reports flagged as coordinated abuse for operator review.
+    Protected by X-Admin-Token.
+    """
+    result = await db.execute(
+        select(CitizenReport)
+        .where(CitizenReport.flagged_coordinated == True)
+        .order_by(CitizenReport.reported_at.desc())
+    )
+    flagged = result.scalars().all()
+    return [
+        {
+            "id": r.id,
+            "tracking_id": r.tracking_id,
+            "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+            "channel": r.channel,
+            "sector": r.sector,
+            "specific_issue": r.specific_issue,
+            "raw_text": r.raw_text,
+            "flagged_coordinated": r.flagged_coordinated
+        }
+        for r in flagged
+    ]
+
+
+# Compatibility router for non-prefixed /admin/* requests
+admin_compat_router = APIRouter(tags=["Admin"])
+admin_compat_router.add_api_route("/admin/runs", get_admin_runs, methods=["GET"])
+admin_compat_router.add_api_route("/admin/flagged", get_flagged_reports, methods=["GET"])
+

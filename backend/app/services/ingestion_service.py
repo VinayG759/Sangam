@@ -1,5 +1,6 @@
 import logging
 from typing import Optional, Dict, Any
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.models.models import CitizenReport, PendingIntake
@@ -31,6 +32,38 @@ async def ingest_citizen_message(
     reporter_hash = None
     if channel_user_id:
         reporter_hash = hash_channel_user(channel_user_id)
+
+    # Phase 20: Abuse Resistance - max 10 reports/day per reporter_hash
+    if reporter_hash:
+        start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        count_stmt = (
+            select(func.count(CitizenReport.id))
+            .where(
+                CitizenReport.reporter_hash == reporter_hash,
+                CitizenReport.reported_at >= start_of_day
+            )
+        )
+        count_res = await db.execute(count_stmt)
+        today_count = 0
+        if hasattr(count_res, "scalar") and callable(count_res.scalar):
+            val = count_res.scalar()
+            import inspect
+            if inspect.iscoroutine(val):
+                val.close()
+                today_count = 0
+            elif isinstance(val, (int, float)):
+                today_count = int(val)
+
+        if today_count >= 10:
+            logger.warning(f"Rate limit exceeded for reporter_hash {reporter_hash}: {today_count}/10 reports today.")
+            return {
+                "status": "rejected",
+                "message": "Maximum reports for today reached. Please try again tomorrow.",
+                "report_id": None,
+                "tracking_id": None,
+                "needs_location_followup": False,
+                "needs_location_confirmation": False
+            }
 
     location_wkt = None
     if latitude is not None and longitude is not None:
@@ -121,10 +154,57 @@ async def ingest_citizen_message(
             embedding=embedding,
             tracking_id=tracking_id,
             channel=channel,
-            reporter_hash=reporter_hash
+            reporter_hash=reporter_hash,
+            flagged_coordinated=False
         )
         db.add(report)
         await db.flush()
+
+        # Coordinated-flood check (Phase 20: Abuse Resistance)
+        # Cosine distance < 0.03 (similarity > 0.97) between distinct reporters in last 1 hour
+        if embedding is not None and reporter_hash is not None:
+            try:
+                window_start = datetime.utcnow() - timedelta(hours=1)
+                matching_stmt = (
+                    select(CitizenReport)
+                    .where(
+                        CitizenReport.id != report.id,
+                        CitizenReport.reported_at >= window_start,
+                        CitizenReport.reporter_hash.isnot(None),
+                        CitizenReport.reporter_hash != reporter_hash,
+                        CitizenReport.embedding.isnot(None),
+                        CitizenReport.embedding.cosine_distance(embedding) < 0.03
+                    )
+                )
+                res = await db.execute(matching_stmt)
+                scalars_fn = getattr(res, "scalars", None)
+                matches = []
+                if callable(scalars_fn):
+                    s_obj = scalars_fn()
+                    import inspect
+                    if inspect.iscoroutine(s_obj):
+                        s_obj.close()
+                    elif hasattr(s_obj, "all") and callable(s_obj.all):
+                        all_res = s_obj.all()
+                        if inspect.iscoroutine(all_res):
+                            all_res.close()
+                        elif isinstance(all_res, (list, tuple)):
+                            matches = list(all_res)
+                elif hasattr(res, "all") and callable(res.all):
+                    all_res = res.all()
+                    import inspect
+                    if inspect.iscoroutine(all_res):
+                        all_res.close()
+                    elif isinstance(all_res, (list, tuple)):
+                        matches = list(all_res)
+
+                if matches:
+                    report.flagged_coordinated = True
+                    for m in matches:
+                        m.flagged_coordinated = True
+                    await db.flush()
+            except Exception as e:
+                logger.warning(f"Coordinated flood check encountered an error: {e}")
         
         if needs_location_confirmation and candidate_region:
             upsert_stmt = pg_insert(PendingIntake).values(

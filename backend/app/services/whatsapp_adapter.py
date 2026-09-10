@@ -259,6 +259,10 @@ async def handle_whatsapp_update(payload: Dict[str, Any], db: AsyncSession) -> N
 
         result = await ingest_citizen_message(**ingest_kwargs)
 
+        if result.get("status") in ("rejected", "rate_limited"):
+            reply_text = result.get("message") or "Maximum reports for today reached. Please try again tomorrow."
+            await _send_whatsapp_message(from_number, reply_text, access_token, phone_number_id)
+            return
 
         tracking_id = result["tracking_id"]
         if result.get("needs_location_confirmation"):
