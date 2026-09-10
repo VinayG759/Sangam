@@ -100,6 +100,15 @@ export default function PriorityList({ priorities, selectedId, onSelect, loading
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span className={`badge ${meta.cls}`}>{meta.label}</span>
+                {Boolean(p.details?.is_emerging_hotspot) && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                    background: 'rgba(6,182,212,0.12)', color: '#06b6d4',
+                    border: '1px solid rgba(6,182,212,0.35)',
+                  }}>
+                    🔥 Emerging
+                  </span>
+                )}
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                   {p.region_name} · {p.report_count} reports
                 </span>
