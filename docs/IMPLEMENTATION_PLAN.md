@@ -1175,6 +1175,68 @@ async def resolve_gps_location(
 
 **Verification**: `resolve_location`'s 5 existing tests in `test_location_resolver.py` must still pass unchanged after the refactor (proves the delegation didn't change its behavior). New tests needed: a mocked mid-range fuzzy score (e.g. 70) returns `"low"` with a region, not `None`; a mocked high score (90) and low score (50) return `"exact"`/`"none"` respectively; a GPS point resolves to the nearest region by centroid distance (mock two sequential `db.execute` calls -- the nearest-id query, then the region lookup); a GPS location message arriving during a pending intake commits directly without any text resolution and takes priority over both `"location"` and `"location_confirmation"` pending states; an affirmative reply (`"yes"`, `"haan"`, etc.) during `"location_confirmation"` commits the candidate region; a non-affirmative reply that also fails to resolve via a fresh guess falls through to ingestion as a new report rather than being discarded (same pattern the existing `"location"` state already uses); the final reply-building block asks "Did you mean X?" when `needs_location_confirmation` is set, before the existing `needs_location_followup` check.
 
+## Status Note — Phases 23, 17, 20, 22 Built by Gemini (Antigravity), Tested and Debugged by Claude, 11 Sep 2026
+
+All four built in one pass, then reviewed file-by-file (not just "tests are
+green") and fixed where real bugs surfaced. 221/221 tests pass.
+
+**Critical, fixed:** Phase 20 added `CitizenReport.flagged_coordinated` as
+a new column on the model. This project has no migration framework --
+`Base.metadata.create_all()` only creates missing tables, it never alters
+an existing one -- and `citizen_reports` already holds real production
+data. Undetected, this would have made every citizen report insert
+(Telegram, WhatsApp, web -- all of them) fail in production the moment
+this deployed, with a `column "flagged_coordinated" does not exist` error.
+Fixed with an idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` added
+to `db_init.py`, which already runs on every container start. **Lesson for
+future phases**: any new model column needs this same treatment, or must
+avoid a new column entirely (the JSON `Priority.details` pattern Phase 14
+used is the alternative).
+
+**Significant, fixed:** Phase 23 as delivered didn't actually resolve GPS
+coordinates to a region at intake -- it stored the raw point and left
+`region_id` null, relying on `clustering_engine.py`'s own spatial fallback
+to sort it out later. That fallback requires `AdminRegion.geom` (real
+boundary polygons), which isn't populated for Karnataka data, so it
+silently degrades to "the first ward in the table" -- meaning GPS sharing,
+as originally delivered, didn't actually improve location accuracy for
+real citizens; it degraded it to arbitrary. Fixed by adding
+`resolve_gps_location()` (nearest-centroid match) and calling it
+immediately wherever GPS coordinates arrive -- fresh reports in
+`ingestion_service.py`, and pending-intake GPS replies in both adapters.
+
+**Moderate, fixed:** a bare "share my location" tap with no accompanying
+text/voice/photo and no pending report to attach it to had nothing for
+Gemini to analyze, but was being sent to `ingest_citizen_message` anyway --
+wasting a real, rate-limited Gemini call and creating a content-free
+report with a real tracking ID. Fixed with the same guard pattern already
+used for the `/start` command: ask for what's missing instead of ingesting
+noise.
+
+**Code quality, fixed:** `location_resolver.py` and `ingestion_service.py`
+had several `inspect.iscoroutine(...)` checks wrapping `db.execute(...)`
+results, catching every exception and silently degrading to "no result"
+regardless of cause. Root cause traced, not just deleted: a bare
+`unittest.mock.AsyncMock()` session's attribute chain auto-propagates
+`AsyncMock` to every child, so an unconfigured `result.scalar()` returns an
+unawaited coroutine in tests -- not a hypothetical production failure mode
+at all. The real fix belonged in the test fixtures (explicit
+`side_effect`/`MagicMock` configuration, matching the pattern already used
+correctly elsewhere in this codebase), not in production code silently
+swallowing every exception to paper over it. Simplified back to the
+established two-line pattern (`result = await db.execute(stmt); rows =
+result.scalars().all()`) in every affected file; fixed the six tests whose
+mocks had been relying on the swallowed-error behavior.
+
+**Design note, deferred, not a bug:** Phase 17 created
+`backend/app/routes/admin.py` (shared-`ADMIN_TOKEN`-header auth, `/runs`
+and `/flagged` routes). The planned Clerk auth work (see the "Superseded"
+note above Phase 21) also plans to create `backend/app/routes/admin.py` --
+that plan needs updating to extend this existing file rather than create
+it fresh, once Clerk work actually starts. Also: `ADMIN_TOKEN` is a new
+required env var for Phase 17/20's admin routes to work at all -- not yet
+set anywhere.
+
 ### Phase 22: Small Fixes — Media Size Limit & Pack Validator CLI
 
 Two independent, small items:
