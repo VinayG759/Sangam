@@ -108,7 +108,6 @@ async def test_coordinated_flood_detection_flags_near_identical_embeddings(monke
 
     import app.services.ingestion_service as ingestion_mod
     monkeypatch.setattr(ingestion_mod, "gemini_service", MockGemini())
-    monkeypatch.setattr(ingestion_mod, "resolve_location", AsyncMock(return_value=None))
     monkeypatch.setattr(ingestion_mod, "resolve_location_with_confidence", AsyncMock(return_value={
         "region": None, "candidate": None, "confidence": None, "score": 0
     }))
@@ -173,7 +172,6 @@ async def test_distinct_reports_different_embeddings_not_flagged(monkeypatch):
 
     import app.services.ingestion_service as ingestion_mod
     monkeypatch.setattr(ingestion_mod, "gemini_service", MockGemini())
-    monkeypatch.setattr(ingestion_mod, "resolve_location", AsyncMock(return_value=None))
     monkeypatch.setattr(ingestion_mod, "resolve_location_with_confidence", AsyncMock(return_value={
         "region": None, "candidate": None, "confidence": None, "score": 0
     }))

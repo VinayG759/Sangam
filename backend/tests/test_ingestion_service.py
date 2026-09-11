@@ -19,14 +19,25 @@ def _no_background_reprocess(monkeypatch):
 async def test_ingest_citizen_message_populates_fields(monkeypatch):
     mock_session = AsyncMock()
     mock_session.add = MagicMock()  # AsyncSession.add() is sync even on an async session
-    mock_session.execute.return_value.scalar_one.return_value = CitizenReport(
-        tracking_id="SNG-ABCD",
-        channel="telegram",
-        reporter_hash="0"*64,
-        raw_text="Redacted",
-        pii_redacted_text="The road is broken"
-    )
-    
+
+    # See the matching comment in test_needs_location_followup_upserts_pending_intake:
+    # a bare AsyncMock()'s attribute chain auto-propagates AsyncMock to every
+    # child, so an unconfigured .execute(...).scalar()/.scalar_one() returns
+    # an unawaited coroutine rather than a real value. Phase 20's rate-limit
+    # check calls .scalar() unconditionally whenever reporter_hash is set.
+    def _execute_side_effect(*args, **kwargs):
+        result = MagicMock()
+        result.scalar.return_value = 0
+        result.scalar_one.return_value = CitizenReport(
+            tracking_id="SNG-ABCD",
+            channel="telegram",
+            reporter_hash="0"*64,
+            raw_text="Redacted",
+            pii_redacted_text="The road is broken"
+        )
+        return result
+    mock_session.execute = AsyncMock(side_effect=_execute_side_effect)
+
     # Mock gemini service responses
     class MockGeminiService:
         def analyze_citizen_report(self, text_content, audio_bytes, mime_type):
@@ -169,7 +180,20 @@ async def test_needs_location_followup_upserts_pending_intake(monkeypatch):
     # one from a still-unresolved text report). Must be an upsert instead.
     mock_session = AsyncMock()
     mock_session.add = MagicMock()
-    mock_session.execute.return_value.scalar_one_or_none.return_value = None
+
+    # Phase 20's abuse-resistance rate-limit check runs an unconditional
+    # db.execute(count_stmt) before anything else whenever a reporter_hash
+    # is present, and calls .scalar() (a SYNCHRONOUS method in real
+    # SQLAlchemy) on the result. A bare AsyncMock()'s attribute chain
+    # auto-propagates AsyncMock to every child, so an unconfigured
+    # .execute(...).scalar() returns an unawaited coroutine, not a real
+    # value -- explicit side_effect avoids that trap.
+    def _execute_side_effect(*args, **kwargs):
+        result = MagicMock()
+        result.scalar.return_value = 0
+        result.scalar_one_or_none.return_value = None
+        return result
+    mock_session.execute = AsyncMock(side_effect=_execute_side_effect)
 
     class MockGeminiService:
         def analyze_citizen_report(self, text_content, audio_bytes, mime_type):
@@ -191,7 +215,9 @@ async def test_needs_location_followup_upserts_pending_intake(monkeypatch):
     monkeypatch.setattr(ingestion_module, "gemini_service", MockGeminiService())
     # Force the "couldn't resolve a location" branch regardless of what
     # regions exist in whatever DB this suite happens to run against.
-    monkeypatch.setattr(ingestion_module, "resolve_location", AsyncMock(return_value=None))
+    monkeypatch.setattr(ingestion_module, "resolve_location_with_confidence", AsyncMock(return_value={
+        "region": None, "candidate": None, "confidence": "low", "score": 0.0
+    }))
 
     result = await ingest_citizen_message(
         db=mock_session,

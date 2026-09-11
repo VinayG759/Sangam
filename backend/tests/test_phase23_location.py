@@ -66,6 +66,20 @@ async def test_ingest_citizen_message_with_gps(monkeypatch):
     mock_session = AsyncMock()
     mock_session.add = MagicMock()
 
+    # A bare AsyncMock()'s attribute chain auto-propagates AsyncMock to
+    # every child, so an unconfigured .execute(...).scalar() returns an
+    # unawaited coroutine rather than a real value -- Phase 20's rate-limit
+    # check calls .scalar() unconditionally whenever reporter_hash is set.
+    def _execute_side_effect(*args, **kwargs):
+        result = MagicMock()
+        result.scalar.return_value = 0
+        return result
+    mock_session.execute = AsyncMock(side_effect=_execute_side_effect)
+
+    nearest_region = AdminRegion(id=10, country_code="IN", level="subdistrict", name="Hiriyur")
+    import app.services.ingestion_service as ingestion_module
+    monkeypatch.setattr(ingestion_module, "resolve_gps_location", AsyncMock(return_value=nearest_region))
+
     class MockGemini:
         def analyze_citizen_report(self, text_content, audio_bytes, mime_type):
             return {
@@ -113,6 +127,12 @@ async def test_ingest_citizen_message_medium_confidence_triggers_confirmation(mo
     mock_session = AsyncMock()
     mock_session.add = MagicMock()
 
+    def _execute_side_effect(*args, **kwargs):
+        result = MagicMock()
+        result.scalar.return_value = 0
+        return result
+    mock_session.execute = AsyncMock(side_effect=_execute_side_effect)
+
     class MockGemini:
         def analyze_citizen_report(self, text_content, audio_bytes, mime_type):
             return {
@@ -132,7 +152,6 @@ async def test_ingest_citizen_message_medium_confidence_triggers_confirmation(mo
 
     import app.services.ingestion_service as ingestion_module
     monkeypatch.setattr(ingestion_module, "gemini_service", MockGemini())
-    monkeypatch.setattr(ingestion_module, "resolve_location", AsyncMock(return_value=None))
     monkeypatch.setattr(ingestion_module, "resolve_location_with_confidence", AsyncMock(return_value={
         "region": None,
         "candidate": candidate_region,
@@ -209,6 +228,8 @@ async def test_telegram_pending_location_update_via_gps(monkeypatch):
     import app.services.telegram_adapter as tg_module
     monkeypatch.setattr(tg_module, "_send_telegram_message", mock_send)
     monkeypatch.setattr(tg_module, "hash_channel_user", lambda uid: "hash_123")
+    nearest_region = AdminRegion(id=10, country_code="IN", level="subdistrict", name="Hiriyur")
+    monkeypatch.setattr(tg_module, "resolve_gps_location", AsyncMock(return_value=nearest_region))
 
     # User sends a native Telegram GPS pin
     update_payload = {
@@ -292,6 +313,8 @@ async def test_whatsapp_pending_location_update_via_gps(monkeypatch):
     import app.services.whatsapp_adapter as wa_module
     monkeypatch.setattr(wa_module, "_send_whatsapp_message", mock_send)
     monkeypatch.setattr(wa_module, "hash_channel_user", lambda uid: "hash_wa_123")
+    nearest_region = AdminRegion(id=10, country_code="IN", level="subdistrict", name="Hiriyur")
+    monkeypatch.setattr(wa_module, "resolve_gps_location", AsyncMock(return_value=nearest_region))
 
     # User sends WhatsApp location type
     payload = {
@@ -317,3 +340,73 @@ async def test_whatsapp_pending_location_update_via_gps(monkeypatch):
     mock_send.assert_called_once()
     sent_text = mock_send.call_args[0][1]
     assert "Location updated successfully with GPS coordinates" in sent_text
+
+
+@pytest.mark.asyncio
+async def test_telegram_bare_location_with_no_pending_asks_for_description(monkeypatch):
+    # A standalone "share my location" tap with no pending report to attach
+    # it to and no text/voice/photo has nothing for Gemini to analyze --
+    # must not be sent through to ingestion (wastes a real Gemini call,
+    # creates a content-free report).
+    import app.services.telegram_adapter as tg_module
+
+    mock_session = AsyncMock()
+    pending_lookup = MagicMock()
+    pending_lookup.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = pending_lookup
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "fake_bot_token")
+    mock_send = AsyncMock()
+    monkeypatch.setattr(tg_module, "_send_telegram_message", mock_send)
+    mock_ingest = AsyncMock()
+    monkeypatch.setattr(tg_module, "ingest_citizen_message", mock_ingest)
+
+    update_payload = {
+        "message": {
+            "chat": {"id": 12345},
+            "location": {"latitude": 13.9446, "longitude": 76.6172}
+        }
+    }
+
+    await handle_telegram_update(update_payload, mock_session)
+
+    mock_ingest.assert_not_called()
+    mock_send.assert_called_once()
+    assert "describ" in mock_send.call_args[0][1].lower()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_bare_location_with_no_pending_asks_for_description(monkeypatch):
+    import app.services.whatsapp_adapter as wa_module
+
+    mock_session = AsyncMock()
+    pending_lookup = MagicMock()
+    pending_lookup.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = pending_lookup
+
+    monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "test_access_token")
+    monkeypatch.setenv("WHATSAPP_PHONE_NUMBER_ID", "test_phone_id")
+    mock_send = AsyncMock()
+    monkeypatch.setattr(wa_module, "_send_whatsapp_message", mock_send)
+    mock_ingest = AsyncMock()
+    monkeypatch.setattr(wa_module, "ingest_citizen_message", mock_ingest)
+
+    payload = {
+        "entry": [{
+            "changes": [{
+                "value": {
+                    "messages": [{
+                        "from": "919876543210",
+                        "type": "location",
+                        "location": {"latitude": 13.9446, "longitude": 76.6172}
+                    }]
+                }
+            }]
+        }]
+    }
+
+    await handle_whatsapp_update(payload, mock_session)
+
+    mock_ingest.assert_not_called()
+    mock_send.assert_called_once()
+    assert "describ" in mock_send.call_args[0][1].lower()

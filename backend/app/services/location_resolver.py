@@ -1,7 +1,7 @@
 import logging
 from rapidfuzz import process, fuzz
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.models.models import AdminRegion
 
 from typing import Dict, Any, Optional
@@ -33,30 +33,8 @@ async def resolve_location_with_confidence(
     # Load all regions for the country
     stmt = select(AdminRegion).where(AdminRegion.country_code == country_code)
     result = await db.execute(stmt)
-    try:
-        scalars_fn = getattr(result, "scalars", None)
-        if callable(scalars_fn):
-            scalars_obj = scalars_fn()
-            import inspect
-            if inspect.iscoroutine(scalars_obj):
-                scalars_obj.close()
-                regions = []
-            elif hasattr(scalars_obj, "all") and callable(scalars_obj.all):
-                all_res = scalars_obj.all()
-                if inspect.iscoroutine(all_res):
-                    all_res.close()
-                    regions = []
-                else:
-                    regions = all_res or []
-            else:
-                regions = []
-        else:
-            regions = []
-    except Exception:
-        regions = []
+    regions = result.scalars().all()
 
-
-    
     if not regions:
         return empty_result
         
@@ -135,4 +113,34 @@ async def resolve_location_with_confidence(
 async def resolve_location(location_text_latin: str, country_code: str, db: AsyncSession) -> AdminRegion | None:
     res = await resolve_location_with_confidence(location_text_latin, country_code, db)
     return res["region"]
+
+
+async def resolve_gps_location(
+    latitude: float, longitude: float, country_code: str, db: AsyncSession
+) -> AdminRegion | None:
+    """
+    Resolves a raw GPS point to the nearest administrative region with a
+    known centroid -- used when a citizen shares their device location
+    natively instead of typing a place name.
+
+    Deliberately does NOT rely on clustering_engine.py's own spatial
+    fallback (ST_Contains/ST_Distance against AdminRegion.geom): real
+    boundary polygons are not populated for Karnataka data, only
+    .centroid is, so that fallback silently degrades to "the first ward
+    in the table" for every GPS-only report -- arbitrary, not nearest.
+    This matches on centroid distance instead, which IS populated.
+    """
+    stmt = text("""
+        SELECT id FROM admin_regions
+        WHERE country_code = :country_code AND centroid IS NOT NULL
+        ORDER BY ST_Distance(centroid, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)) ASC
+        LIMIT 1;
+    """)
+    result = await db.execute(stmt, {"country_code": country_code, "lon": longitude, "lat": latitude})
+    row = result.first()
+    if not row:
+        return None
+
+    region_result = await db.execute(select(AdminRegion).where(AdminRegion.id == row[0]))
+    return region_result.scalar_one_or_none()
 

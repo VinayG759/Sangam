@@ -8,7 +8,7 @@ from sqlalchemy import select, update as sa_update
 from app.services.ingestion_service import ingest_citizen_message
 from app.models.models import PendingIntake, CitizenReport
 from app.utils.hashing import hash_channel_user
-from app.services.location_resolver import resolve_location
+from app.services.location_resolver import resolve_location, resolve_gps_location
 from app.services.pack_loader import pack_loader
 
 logger = logging.getLogger(__name__)
@@ -145,15 +145,24 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
                     return r_obj.tracking_id
                 return "Unknown"
 
-            # Case A: user sent GPS coordinates to resolve/update location
+            # Case A: user sent GPS coordinates to resolve/update location.
+            # Resolved to a region immediately (nearest centroid) rather
+            # than just storing the raw point and leaving region_id null --
+            # clustering_engine.py's own spatial fallback needs
+            # AdminRegion.geom, which isn't populated for Karnataka data,
+            # so it would otherwise silently attribute this to an arbitrary
+            # ward instead of the citizen's real location.
             if latitude is not None and longitude is not None:
                 await db.delete(pending)
                 if report_id:
                     location_wkt = f"SRID=4326;POINT({longitude} {latitude})"
+                    gps_region = await resolve_gps_location(
+                        latitude, longitude, pack_loader.load_active_pack().country_code, db
+                    )
                     await db.execute(
                         sa_update(CitizenReport)
                         .where(CitizenReport.id == report_id)
-                        .values(location=location_wkt)
+                        .values(location=location_wkt, region_id=gps_region.id if gps_region else CitizenReport.region_id)
                     )
                     await db.commit()
                     r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
@@ -259,6 +268,21 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
 
     if not text and not audio_bytes and latitude is None:
         await _send_telegram_message(chat_id, "Please send a text message, a voice note, a photo, or share your location describing the infrastructure issue.", bot_token)
+        return
+
+    # A bare location share with no accompanying text/voice/photo and no
+    # pending report to attach it to (that case was already handled above
+    # and returned) has nothing for Gemini to analyze -- sending it through
+    # anyway wastes a real, rate-limited Gemini call and creates a
+    # low-quality report with no actual complaint content. Same pattern as
+    # the /start-command guard above: ask for what's missing instead of
+    # ingesting noise.
+    if latitude is not None and not text and not audio_bytes:
+        await _send_telegram_message(
+            chat_id,
+            "Thanks for sharing your location. Please also send a text message, voice note, or photo describing the infrastructure issue.",
+            bot_token
+        )
         return
 
     try:

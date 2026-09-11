@@ -7,7 +7,7 @@ from app.models.models import CitizenReport, PendingIntake
 from app.services.gemini_service import gemini_service
 from app.utils.hashing import hash_channel_user
 from app.utils.tracking_id import generate_tracking_id
-from app.services.location_resolver import resolve_location, resolve_location_with_confidence
+from app.services.location_resolver import resolve_location_with_confidence, resolve_gps_location
 from datetime import datetime, timedelta
 from app.services.pack_loader import pack_loader
 from app.services.reprocess_scheduler import schedule_reprocess
@@ -44,15 +44,7 @@ async def ingest_citizen_message(
             )
         )
         count_res = await db.execute(count_stmt)
-        today_count = 0
-        if hasattr(count_res, "scalar") and callable(count_res.scalar):
-            val = count_res.scalar()
-            import inspect
-            if inspect.iscoroutine(val):
-                val.close()
-                today_count = 0
-            elif isinstance(val, (int, float)):
-                today_count = int(val)
+        today_count = count_res.scalar() or 0
 
         if today_count >= 10:
             logger.warning(f"Rate limit exceeded for reporter_hash {reporter_hash}: {today_count}/10 reports today.")
@@ -66,8 +58,18 @@ async def ingest_citizen_message(
             }
 
     location_wkt = None
+    gps_region_id = None
     if latitude is not None and longitude is not None:
         location_wkt = f"SRID=4326;POINT({longitude} {latitude})"
+        # GPS is authoritative -- resolve it to a region immediately rather
+        # than leaving region_id null and relying on clustering_engine.py's
+        # own spatial fallback, which requires AdminRegion.geom (real
+        # boundary polygons, not populated for Karnataka data) and silently
+        # degrades to "the first ward in the table" when geom is missing.
+        gps_region = await resolve_gps_location(
+            latitude, longitude, pack_loader.load_active_pack().country_code, db
+        )
+        gps_region_id = gps_region.id if gps_region else None
 
     # Phase 22: Media size limit (10 MB)
     if audio_bytes and len(audio_bytes) > 10 * 1024 * 1024:
@@ -101,7 +103,7 @@ async def ingest_citizen_message(
         logger.error(f"Gemini analysis failed during ingestion: {e}")
         gemini_failed = True
 
-    region_id = None
+    region_id = gps_region_id
     needs_location_followup = False
     needs_location_confirmation = False
     candidate_region = None
@@ -123,31 +125,26 @@ async def ingest_citizen_message(
                 # Successfully redacted, don't keep raw
                 raw_text_to_save = "Redacted"
                 
-            # Resolve location
-            loc_text = analysis.get("location_text_latin", "")
-            region = await resolve_location(
-                loc_text,
-                pack_loader.load_active_pack().country_code,
-                db
-            )
-            
-            region_id = region.id if region else None
-            
-            if not region_id and not location_wkt and reporter_hash:
-                try:
-                    loc_conf = await resolve_location_with_confidence(
-                        loc_text,
-                        pack_loader.load_active_pack().country_code,
-                        db
-                    )
+            # Resolve location from text -- but only if GPS didn't already
+            # give us a region. GPS is authoritative; asking Gemini's
+            # transcription to confirm or override it would be a downgrade,
+            # not a check.
+            if region_id is None:
+                loc_text = analysis.get("location_text_latin", "")
+                loc_conf = await resolve_location_with_confidence(
+                    loc_text,
+                    pack_loader.load_active_pack().country_code,
+                    db
+                )
+                region = loc_conf["region"]
+                region_id = region.id if region else None
+
+                if not region_id and not location_wkt and reporter_hash:
                     if loc_conf.get("candidate"):
                         candidate_region = loc_conf["candidate"]
                         needs_location_confirmation = True
                     else:
                         needs_location_followup = True
-                except Exception as ex:
-                    logger.warning(f"Failed resolving location confidence: {ex}")
-                    needs_location_followup = True
 
 
         report = CitizenReport(
@@ -188,26 +185,7 @@ async def ingest_citizen_message(
                     )
                 )
                 res = await db.execute(matching_stmt)
-                scalars_fn = getattr(res, "scalars", None)
-                matches = []
-                if callable(scalars_fn):
-                    s_obj = scalars_fn()
-                    import inspect
-                    if inspect.iscoroutine(s_obj):
-                        s_obj.close()
-                    elif hasattr(s_obj, "all") and callable(s_obj.all):
-                        all_res = s_obj.all()
-                        if inspect.iscoroutine(all_res):
-                            all_res.close()
-                        elif isinstance(all_res, (list, tuple)):
-                            matches = list(all_res)
-                elif hasattr(res, "all") and callable(res.all):
-                    all_res = res.all()
-                    import inspect
-                    if inspect.iscoroutine(all_res):
-                        all_res.close()
-                    elif isinstance(all_res, (list, tuple)):
-                        matches = list(all_res)
+                matches = res.scalars().all()
 
                 if matches:
                     report.flagged_coordinated = True
