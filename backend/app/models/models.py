@@ -77,6 +77,7 @@ class CitizenReport(Base):
     
     reported_at = Column(DateTime, default=func.now())
     cluster_id = Column(Integer, ForeignKey("issue_clusters.id"), nullable=True)
+    flagged_coordinated = Column(Boolean, default=False, nullable=False)
 
     cluster = relationship("IssueCluster", back_populates="reports")
     region = relationship("AdminRegion", foreign_keys=[region_id])

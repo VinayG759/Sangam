@@ -4,7 +4,7 @@ import aiohttp
 from datetime import datetime
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update as sa_update
 from app.services.ingestion_service import ingest_citizen_message
 from app.models.models import PendingIntake, CitizenReport
 from app.utils.hashing import hash_channel_user
@@ -72,6 +72,17 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
         file_id = photo[-1].get("file_id")
         mime_type = "image/jpeg"
         
+    MAX_MEDIA_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+    reported_size = (voice.get("file_size") if voice else None) or (photo[-1].get("file_size") if photo and isinstance(photo, list) and len(photo) > 0 else None)
+    if reported_size and reported_size > MAX_MEDIA_SIZE_BYTES:
+        await _send_telegram_message(
+            chat_id,
+            "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+            bot_token
+        )
+        return
+
     if file_id:
         # Download media file
         try:
@@ -82,6 +93,14 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
                     if resp.status == 200:
                         file_data = await resp.json()
                         file_path = file_data.get("result", {}).get("file_path")
+                        file_size_res = file_data.get("result", {}).get("file_size")
+                        if file_size_res and file_size_res > MAX_MEDIA_SIZE_BYTES:
+                            await _send_telegram_message(
+                                chat_id,
+                                "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+                                bot_token
+                            )
+                            return
                         
                         if file_path:
                             # Download actual file
@@ -94,6 +113,18 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
             await _send_telegram_message(chat_id, "Sorry, I couldn't download your media. Please try again or send a text message.", bot_token)
             return
 
+        if audio_bytes and len(audio_bytes) > MAX_MEDIA_SIZE_BYTES:
+            await _send_telegram_message(
+                chat_id,
+                "The media file is too large (maximum size is 10 MB). Please send a shorter voice note or smaller image.",
+                bot_token
+            )
+            return
+
+    tg_loc = message.get("location")
+    latitude = float(tg_loc["latitude"]) if tg_loc and "latitude" in tg_loc else None
+    longitude = float(tg_loc["longitude"]) if tg_loc and "longitude" in tg_loc else None
+
     # Check for pending intake first
     channel_user_hash = hash_channel_user(str(chat_id))
     stmt = select(PendingIntake).where(
@@ -103,94 +134,160 @@ async def handle_telegram_update(update: Dict[str, Any], db: AsyncSession) -> No
     db_result = await db.execute(stmt)
     pending = db_result.scalar_one_or_none()
     
-    if pending and pending.awaiting == "location":
+    if pending and pending.awaiting in ("location", "location_confirmation"):
         try:
-            # A voice note or photo has no `text` to attempt as a location
-            # guess -- resolve_location can't fuzzy-match audio bytes.
-            # Previously this whole block required `and text`, so a
-            # voice/photo reply silently bypassed the pending question
-            # entirely rather than resolving or declining it (reproduced
-            # live: the old pending row was still sitting there when the
-            # next report also needed a location, colliding on
-            # PendingIntake's channel_user_hash primary key). Treat "no
-            # text to try" the same as "tried and failed to match".
-            region = await resolve_location(
-                text,
-                pack_loader.load_active_pack().country_code,
-                db
-            ) if text else None
-            report_id = pending.partial_report.get("report_id")
+            report_id = pending.partial_report.get("report_id") if isinstance(pending.partial_report, dict) else None
 
-            # We always delete the pending state after one try
-            await db.delete(pending)
+            def _get_tracking_id(r_obj=None):
+                if isinstance(pending.partial_report, dict) and pending.partial_report.get("tracking_id"):
+                    return pending.partial_report["tracking_id"]
+                if r_obj and hasattr(r_obj, "tracking_id") and r_obj.tracking_id:
+                    return r_obj.tracking_id
+                return "Unknown"
 
-            if region and report_id:
-                await db.execute(
-                    update(CitizenReport)
-                    .where(CitizenReport.id == report_id)
-                    .values(region_id=region.id)
-                )
-                await db.commit()
+            # Case A: user sent GPS coordinates to resolve/update location
+            if latitude is not None and longitude is not None:
+                await db.delete(pending)
+                if report_id:
+                    location_wkt = f"SRID=4326;POINT({longitude} {latitude})"
+                    await db.execute(
+                        sa_update(CitizenReport)
+                        .where(CitizenReport.id == report_id)
+                        .values(location=location_wkt)
+                    )
+                    await db.commit()
+                    r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                    r = r_res.scalar_one_or_none()
+                    tracking_id = _get_tracking_id(r)
+                    await _send_telegram_message(chat_id, f"Location updated successfully with GPS coordinates. Thank you. Tracking ID: {tracking_id}", bot_token)
+                    return
 
-                r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
-                r = r_res.scalar_one_or_none()
-                tracking_id = r.tracking_id if r else "Unknown"
+            # Case B: confirmation of a candidate location
+            if pending.awaiting == "location_confirmation":
+                candidate_id = pending.partial_report.get("candidate_region_id") if isinstance(pending.partial_report, dict) else None
+                candidate_name = pending.partial_report.get("candidate_region_name") if isinstance(pending.partial_report, dict) else None
+                AFFIRMATIVE_RESPONSES = {"yes", "y", "haudu", "sari", "correct", "true", "ok", "okay", "confirm", "right", "sure"}
+                clean_text = text.strip().lower() if text else ""
 
-                await _send_telegram_message(chat_id, f"Location updated successfully. Thank you. Tracking ID: {tracking_id}", bot_token)
-                return
-            elif report_id:
-                await db.commit()
-                r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
-                r = r_res.scalar_one_or_none()
-                tracking_id = r.tracking_id if r else "Unknown"
+                if clean_text in AFFIRMATIVE_RESPONSES and candidate_id and report_id:
+                    await db.delete(pending)
+                    await db.execute(
+                        sa_update(CitizenReport)
+                        .where(CitizenReport.id == report_id)
+                        .values(region_id=candidate_id)
+                    )
+                    await db.commit()
+                    r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                    r = r_res.scalar_one_or_none()
+                    tracking_id = _get_tracking_id(r)
+                    await _send_telegram_message(chat_id, f"Location confirmed as {candidate_name}. Thank you. Tracking ID: {tracking_id}", bot_token)
+                    return
+                else:
+                    # User replied with something other than yes - try to resolve as a new location name
+                    region = await resolve_location(
+                        text,
+                        pack_loader.load_active_pack().country_code,
+                        db
+                    ) if text else None
 
-                # Don't discard this message here. A reply that fails to match
-                # a known place name is far more often unrelated new content
-                # -- another report, a question, anything -- than a genuine
-                # failed location guess (reproduced live: a real new report
-                # sent right after a location prompt was being silently
-                # thrown away here, attributed to the *previous* report's
-                # tracking ID with no trace of its own text ever existing).
-                # Tell the citizen what happened to the earlier report, then
-                # fall through to the normal ingestion path below so this
-                # message gets its own tracking ID instead of vanishing.
-                await _send_telegram_message(
-                    chat_id,
-                    f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
-                    "it's saved without one. Treating this message as a new report...",
-                    bot_token
-                )
+                    await db.delete(pending)
+                    if region and report_id:
+                        await db.execute(
+                            sa_update(CitizenReport)
+                            .where(CitizenReport.id == report_id)
+                            .values(region_id=region.id)
+                        )
+                        await db.commit()
+                        r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                        r = r_res.scalar_one_or_none()
+                        tracking_id = _get_tracking_id(r)
+                        await _send_telegram_message(chat_id, f"Location updated successfully to {region.name}. Thank you. Tracking ID: {tracking_id}", bot_token)
+                        return
+                    elif report_id:
+                        await db.commit()
+                        r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                        r = r_res.scalar_one_or_none()
+                        tracking_id = _get_tracking_id(r)
+                        await _send_telegram_message(
+                            chat_id,
+                            f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
+                            "it's saved without one. Treating this message as a new report...",
+                            bot_token
+                        )
+            else:
+                # Case C: awaiting = "location"
+                region = await resolve_location(
+                    text,
+                    pack_loader.load_active_pack().country_code,
+                    db
+                ) if text else None
+
+                # We always delete the pending state after one try
+                await db.delete(pending)
+
+                if region and report_id:
+                    await db.execute(
+                        sa_update(CitizenReport)
+                        .where(CitizenReport.id == report_id)
+                        .values(region_id=region.id)
+                    )
+                    await db.commit()
+
+                    r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                    r = r_res.scalar_one_or_none()
+                    tracking_id = _get_tracking_id(r)
+
+                    await _send_telegram_message(chat_id, f"Location updated successfully. Thank you. Tracking ID: {tracking_id}", bot_token)
+                    return
+                elif report_id:
+                    await db.commit()
+                    r_res = await db.execute(select(CitizenReport).where(CitizenReport.id == report_id))
+                    r = r_res.scalar_one_or_none()
+                    tracking_id = _get_tracking_id(r)
+
+                    await _send_telegram_message(
+                        chat_id,
+                        f"We couldn't find that as a location for your previous report (Tracking ID: {tracking_id}) -- "
+                        "it's saved without one. Treating this message as a new report...",
+                        bot_token
+                    )
         except Exception as e:
-            # This whole block used to be unguarded -- any failure here
-            # (a DB error, resolve_location throwing, anything) propagated
-            # past webhooks.py's own try/except, which only logs and
-            # returns 200 to Telegram, leaving the citizen with *no reply
-            # at all*. Reproduced live: a message sent right after this
-            # exact flow got total silence, not even the generic error
-            # message every other path already had.
             logger.error(f"Error resolving pending location intake: {e}")
             await db.rollback()
             await _send_telegram_message(chat_id, "Sorry, there was an error processing your report. Please try again later.", bot_token)
             return
 
-    if not text and not audio_bytes:
-        await _send_telegram_message(chat_id, "Please send a text message, a voice note, or a photo describing the infrastructure issue.", bot_token)
+    if not text and not audio_bytes and latitude is None:
+        await _send_telegram_message(chat_id, "Please send a text message, a voice note, a photo, or share your location describing the infrastructure issue.", bot_token)
         return
 
     try:
         # Ingest
-        result = await ingest_citizen_message(
-            db=db,
-            text=text,
-            audio_bytes=audio_bytes,
-            mime_type=mime_type,
-            channel="telegram",
-            channel_user_id=str(chat_id)
-        )
-        
+        ingest_kwargs = {
+            "db": db,
+            "text": text,
+            "audio_bytes": audio_bytes,
+            "mime_type": mime_type,
+            "channel": "telegram",
+            "channel_user_id": str(chat_id)
+        }
+        if latitude is not None and longitude is not None:
+            ingest_kwargs["latitude"] = latitude
+            ingest_kwargs["longitude"] = longitude
+
+        result = await ingest_citizen_message(**ingest_kwargs)
+
+        if result.get("status") in ("rejected", "rate_limited"):
+            reply_text = result.get("message") or "Maximum reports for today reached. Please try again tomorrow."
+            await _send_telegram_message(chat_id, reply_text, bot_token)
+            return
+
         tracking_id = result["tracking_id"]
-        if result.get("needs_location_followup"):
-            reply_text = f"Thank you. We received your report (Tracking ID: {tracking_id}), but we couldn't detect a specific location. Could you please reply with the name of the ward, block, or district this relates to?"
+        if result.get("needs_location_confirmation"):
+            candidate = result.get("candidate_region_name") or "detected area"
+            reply_text = f"Thank you. We received your report (Tracking ID: {tracking_id}). We detected your location as {candidate}. Reply 'yes' to confirm, or reply with your ward, block, or district name (or share your GPS location)."
+        elif result.get("needs_location_followup"):
+            reply_text = f"Thank you. We received your report (Tracking ID: {tracking_id}), but we couldn't detect a specific location. Could you please reply with the name of the ward, block, or district this relates to (or share your GPS location)?"
         else:
             reply_text = f"Thank you. Your report has been securely received.\n\nTracking ID: {tracking_id}\n\nYou can use this tracking ID to check the status of your report."
             
