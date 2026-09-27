@@ -15,6 +15,10 @@ statistics and public spending** — the join that complaint systems never make.
 | **Demand hotspot** | Many residents report the problem; no official data loaded yet to compare | Verify |
 | **Monitor** | Demand close to the typical place | Monitor |
 
+**Impact:** for every place, official programme progress (e.g. Jal Jeevan Mission tap coverage,
+2019 → 2026) is set beside what residents report today — showing where investment is not reaching
+people. Once completed-project data is loaded, complaints before and after each project are compared too.
+
 > *Grievance systems route complaints. Sangam audits priorities.*
 
 ## Why you can trust the ranking
@@ -24,8 +28,11 @@ statistics and public spending** — the join that complaint systems never make.
 - **Every AI-written number is checked by code.** Gemini writes a short explanation from a closed list of
   sourced facts; if it writes any number that is not in those facts, the explanation is rejected.
 - **Every figure links to its source.**
-- **Reporters are protected.** Phone numbers and chat IDs are stored only as a keyed hash; personal
-  details are removed before storage; groups of fewer than 5 people are never shown.
+- **Reporters are protected.** A reporter's identity is stored only as a keyed hash; personal details
+  are removed before storage; groups of fewer than 5 people are never shown. To tell a citizen when
+  their report reaches the priority list, their chat ID is kept **encrypted**, used for that one
+  message, then deleted — or deleted unsent after 180 days. Without an encryption key configured,
+  nothing that can reach a citizen is stored at all.
 - **Degrade, never fail.** If Gemini is unavailable, citizens still get a tracking ID and their report is
   processed later.
 

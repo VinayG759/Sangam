@@ -58,11 +58,18 @@ class Thresholds(BaseModel):
     coordinated_similarity: float = 0.97
     daily_reports_per_reporter: int = 10
     emerging_window_days: int = 14
+    # Impact of a completed project: compare complaints in the window before completion with the
+    # window after it (skipping a grace period while the work settles in).
+    impact_window_days: int = 90
+    impact_grace_days: int = 30
+    impact_change: float = 0.3  # a 30% fall counts as improved, a 30% rise as worsened
 
 
 class Privacy(BaseModel):
     min_distinct_reporters: int = 5
     media_retention_days: int = 90
+    # Encrypted chat IDs are deleted after the update is sent, or after this many days.
+    contact_retention_days: int = 180
 
 
 class Places(BaseModel):

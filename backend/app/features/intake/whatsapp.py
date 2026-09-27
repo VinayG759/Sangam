@@ -7,10 +7,11 @@ import logging
 import httpx
 
 from app.core.config import get_settings
+from app.core.messaging import GRAPH
+from app.core.messaging import send_whatsapp_text as send  # noqa: F401  (the router replies through this)
 from app.features.intake.service import Inbound
 
 log = logging.getLogger(__name__)
-GRAPH = "https://graph.facebook.com/v20.0"
 
 
 def signature_valid(raw_body: bytes, header: str | None) -> bool:
@@ -31,7 +32,7 @@ def parse_payload(payload: dict) -> list[tuple[str, Inbound]]:
                 sender = message.get("from")
                 if not sender:
                     continue
-                inbound = Inbound(channel="whatsapp", sender_id=sender)
+                inbound = Inbound(channel="whatsapp", sender_id=sender, reply_to=sender)
                 kind = message.get("type")
                 if kind == "text":
                     inbound.text = message["text"].get("body")
@@ -57,13 +58,3 @@ def _download(media_id: str) -> tuple[bytes | None, str | None]:
         log.error("WhatsApp media download failed: %s", exc)
         return None, None
 
-
-def send(to: str, text: str) -> None:
-    settings = get_settings()
-    try:
-        httpx.post(f"{GRAPH}/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages",
-                   headers={"Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}"},
-                   json={"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}},
-                   timeout=15)
-    except Exception as exc:
-        log.error("WhatsApp send failed: %s", exc)

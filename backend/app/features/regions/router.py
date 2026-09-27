@@ -22,7 +22,7 @@ def pack_info(pack: Pack = Depends(get_pack)):
         "weights": pack.weights.model_dump(),
         "needs": [{"key": n.key, "label": n.label_en, "labels": n.labels} for n in pack.needs],
         "features": {"simulator": settings.FEATURE_SIMULATOR, "export": settings.FEATURE_EXPORT,
-                     "web_intake": settings.FEATURE_WEB_INTAKE},
+                     "web_intake": settings.FEATURE_WEB_INTAKE, "impact": settings.FEATURE_IMPACT},
     }
 
 

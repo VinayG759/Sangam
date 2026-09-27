@@ -22,11 +22,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.ai import AIClient, AIUnavailable, Understanding
+from app.core.crypto import contacts_enabled, encrypt
 from app.core.pack import Pack
 from app.core.security import reporter_hash
 from app.core.text import redact
 from app.features.intake.location import Gazetteer, Match
-from app.models import Conversation, Region, Report, ReportMedia
+from app.models import Contact, Conversation, Region, Report, ReportMedia
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class Inbound:
     lat: float | None = None
     lon: float | None = None
     region_id: str | None = None  # web form place picker
+    reply_to: str | None = None  # chat ID / phone to send a later status update to; stored only encrypted
 
 
 @dataclass
@@ -107,6 +109,7 @@ def handle_message(db: Session, ai: AIClient, pack: Pack, msg: Inbound) -> Outco
     except AIUnavailable:
         db.add(report)
         db.flush()
+        _remember_contact(db, pack, report, msg)
         if msg.media:
             db.add(ReportMedia(report_id=report.id, mime_type=msg.mime_type or "application/octet-stream",
                                data=msg.media))
@@ -123,6 +126,7 @@ def handle_message(db: Session, ai: AIClient, pack: Pack, msg: Inbound) -> Outco
     _apply_understanding(report, understanding)
     db.add(report)
     db.flush()
+    _remember_contact(db, pack, report, msg)
     _embed(ai, report)
 
     gazetteer = Gazetteer.for_pack(db, pack)
@@ -143,6 +147,14 @@ def handle_message(db: Session, ai: AIClient, pack: Pack, msg: Inbound) -> Outco
 
 
 # ── Steps ────────────────────────────────────────────────────────────────────
+
+
+def _remember_contact(db: Session, pack: Pack, report: Report, msg: Inbound) -> None:
+    """Keep the reply address, encrypted, so the citizen can be told when the report is prioritised."""
+    if not (msg.reply_to and contacts_enabled()):
+        return
+    db.add(Contact(report_id=report.id, channel=msg.channel, address_encrypted=encrypt(msg.reply_to),
+                   expires_at=_now() + timedelta(days=pack.privacy.contact_retention_days)))
 
 
 def _apply_understanding(report: Report, u: Understanding) -> None:

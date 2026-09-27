@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_VERIFY_TOKEN: str = ""
     WHATSAPP_APP_SECRET: str = ""
+    # Meta-approved template for status updates sent after the 24-hour window. Empty = no WhatsApp updates.
+    # The template body must take two parameters: {{1}} tracking ID, {{2}} the update sentence.
+    WHATSAPP_NOTIFY_TEMPLATE: str = ""
+    WHATSAPP_TEMPLATE_LANGUAGE: str = "en"
+
+    # Key for encrypting citizens' chat IDs (so they can be told when their report is prioritised).
+    # Empty = contact storage off: no chat ID is ever kept.
+    CONTACT_ENCRYPTION_KEY: str = ""
+
+    # Public address of the dashboard, used in links sent to citizens (e.g. https://sangam.vercel.app).
+    PUBLIC_APP_URL: str = ""
 
     # Kill switches (see docs/implementation-plan.md §5.3).
     FEATURE_TELEGRAM: bool = True
@@ -47,6 +58,8 @@ class Settings(BaseSettings):
     FEATURE_WEB_INTAKE: bool = True
     FEATURE_SIMULATOR: bool = True
     FEATURE_EXPORT: bool = True
+    FEATURE_IMPACT: bool = True
+    FEATURE_NOTIFY: bool = True
 
     @property
     def sqlalchemy_url(self) -> str:

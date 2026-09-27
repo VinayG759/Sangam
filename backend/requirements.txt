@@ -11,6 +11,7 @@ httpx>=0.27
 python-multipart>=0.0.9
 pyyaml>=6.0
 rapidfuzz>=3.9
+cryptography>=43
 reportlab>=4.2
 slowapi>=0.1.9
 

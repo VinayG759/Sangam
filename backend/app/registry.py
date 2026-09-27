@@ -8,8 +8,10 @@ from fastapi import APIRouter
 from app.core.config import get_settings
 from app.features.analysis.router import router as analysis_router
 from app.features.export.router import router as export_router
+from app.features.impact.router import router as impact_router
 from app.features.intake.router import admin_router as intake_admin_router
 from app.features.intake.router import telegram_router, web_router, whatsapp_router
+from app.features.notify.router import router as notify_router
 from app.features.overview.router import router as overview_router
 from app.features.priorities.router import router as priorities_router
 from app.features.regions.router import router as regions_router
@@ -31,5 +33,7 @@ def enabled_routers() -> list[APIRouter]:
         (whatsapp_router, settings.FEATURE_WHATSAPP),
         (simulator_router, settings.FEATURE_SIMULATOR),
         (export_router, settings.FEATURE_EXPORT),
+        (impact_router, settings.FEATURE_IMPACT),
+        (notify_router, settings.FEATURE_NOTIFY),
     ]
     return [router for router, enabled in routers if enabled]

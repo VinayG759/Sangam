@@ -3,7 +3,9 @@
 # Render's free tier sleeps after 15 idle minutes and Supabase pauses a free
 # project after 7 days without queries, so a scheduled ping keeps both awake.
 # If the SANGAM_ADMIN_TOKEN secret is set, each run also finishes any
-# reports that arrived while Gemini was unavailable and re-runs the analysis.
+# reports that arrived while Gemini was unavailable, tells citizens whose
+# reports reached the priority list, and re-runs the analysis.
+# (Updates use the previous run, so they lag by at most one cycle.)
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   SANGAM_API_URL      e.g. https://sangam-api.onrender.com
@@ -29,9 +31,11 @@ jobs:
           curl -fsS --max-time 120 "$API_URL/health"
           echo
           curl -fsS --max-time 120 -o /dev/null -w "overview: HTTP %{http_code}\n" "$API_URL/api/v1/overview"
-      - name: Reprocess waiting reports and re-run the analysis
+      - name: Reprocess waiting reports, send status updates, re-run the analysis
         if: env.ADMIN_TOKEN != '' && env.API_URL != ''
         run: |
           curl -fsS --max-time 300 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API_URL/api/v1/admin/reprocess"
+          echo
+          curl -fsS --max-time 120 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API_URL/api/v1/admin/notify"
           echo
           curl -fsS --max-time 60 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API_URL/api/v1/admin/runs"

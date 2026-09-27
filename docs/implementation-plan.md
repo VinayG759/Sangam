@@ -44,7 +44,8 @@ tested and committed locally; **nothing is deployed yet**. What it delivered, ma
 | Phase 2 foundations: Alembic, feature folders, import-linter, router, per-page data + error boundaries, frontend CI, kill switches | **Done** |
 | Phase 3 SaaS-grade UI | **Done** — checked in a real browser at desktop and phone width |
 | Phase 7.2 media retention | **Done** — each analysis run deletes raw media older than the pack's limit |
-| Tests | 82 backend (real Postgres) + 6 frontend, all passing; the Docker image builds and passes the smoke test |
+| Phase 4 impact + close the loop | **Done** — `features/impact` (JJM 2019→2026 progress vs residents, real data now; before/after-project comparison, switches on when project data exists) and `features/notify` (encrypted chat IDs, one update, then deleted; 180-day expiry). WhatsApp updates need a Meta-approved template |
+| Tests | 95 backend (real Postgres) + 6 frontend, all passing; the Docker image builds and passes the smoke test |
 
 **Two corrections the rewrite forced — both about honesty:**
 
@@ -320,7 +321,7 @@ frontend/src/
 | 3rd | 2 | Foundations | Migrations, feature folders, router, CI, independence | 3–4 days | After submission | ✅ Done early (rewrite) |
 | 3rd ∥ | 6.1 | Brazil data research | Real, sourced Brazil pack for one estado | 3–5 days, data-bound | After submission, parallel to Phase 2 | Not started |
 | 4th | 6.2–6.4 | Second country live | Validate, multi-pack serving, live switch | 1–2 days | After Phase 2 | Not started |
-| 5th | 4 | Impact measurement + close the loop | Answer the "measure impact" part of the brief | 2–3 days | After Phase 6 | Not started |
+| 5th | 4 | Impact measurement + close the loop | Answer the "measure impact" part of the brief | 2–3 days | After Phase 6 | ✅ Done early (27 Sep) |
 | 6th | 3 | SaaS-grade UI | Dashboard a ministry would take seriously | 3–4 days | After Phase 4 | ✅ Done early (rewrite) |
 | 7th | 5 | National view + reach metrics + investment plans | "National policymakers", "Depth & Reach" | 2–3 days | After Phase 3 | Not started |
 | 8th | 7 | Security & DPG hardening | Signed briefs, retention job, DPGA application | 2 days | Before finale | Not started |
@@ -976,7 +977,8 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-13 | Judge access | Open read-only link, no login | 16 Aug |
 | D-14 | Gemini tier | Free tier through build; paid only in final week if needed | 25 Aug |
 | D-15 | Folder structure | Feature folders + independence rules (§5.2–5.3) | 27 Sep |
-| D-16 | Store encrypted chat IDs to notify citizens (Phase 4.3) | **Pending — Vinay's decision** | — |
+| D-16 | Store encrypted chat IDs to notify citizens (Phase 4.3) | **Yes** — encrypted (Fernet, key only on the server), one update when the report reaches the priority list, then deleted; unsent ones deleted after 180 days; no key = nothing stored | 27 Sep |
+| D-16b | Impact without project data | **Both** — real JJM 2019→2026 progress vs residents now; before/after-project comparison ready for when project data exists | 27 Sep |
 | D-17 | Official scope wording | **"Across BRICS nations"** — Brazil is the first post-submission build (Phase 6); pitch frames it honestly before then | 27 Sep |
 | D-18 | Submission deadline | **30 Sep 2026** confirmed — only Phases 0–1 before submission | 27 Sep |
 | D-19 | Rewrite now vs patch | **Full rewrite now** (Vinay's decision); production keeps the old code until the new version passes its checks and Vinay approves a deploy | 27 Sep |

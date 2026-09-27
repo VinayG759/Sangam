@@ -35,6 +35,9 @@ os.environ.update({
     "REPORTER_HASH_PEPPER": "test-pepper",
     "ALLOWED_ORIGINS": "http://localhost:5173",
     "GEMINI_API_KEY": "",
+    # Fixed test-only key so encrypted contacts can be exercised.
+    "CONTACT_ENCRYPTION_KEY": "q9bYk0Qm2p8m9cRcS6o5Qx1k3Yv6wL0tJm4uZ7aB2cE=",
+    "PUBLIC_APP_URL": "https://sangam.example",
 })
 
 import pytest  # noqa: E402
@@ -48,7 +51,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.core.db import get_engine, new_session  # noqa: E402
 from app.core.pack import get_pack  # noqa: E402
 
-TABLES = ["priorities", "clusters", "analysis_runs", "conversations", "report_media", "reports",
+TABLES = ["priorities", "clusters", "analysis_runs", "contacts", "conversations", "report_media", "reports",
           "projects", "indicators", "regions"]
 
 

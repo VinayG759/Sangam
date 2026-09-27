@@ -114,7 +114,14 @@ approve a deploy.
   on every number. Checked in a real browser on desktop and phone.
 - Practice data, the smoke test, a LICENSE file, and a new README, deploy guide and "add a
   country" guide.
-- 88 automatic tests, all passing. The Docker version was tested end to end too.
+- **Impact (Phase 4):** a new Impact page. For every block it shows the government's water-tap
+  coverage in 2019 and 2026 next to what residents say today — so you can see where money went in
+  but water isn't reaching people. It also compares complaints before and after a finished project,
+  which switches on once we have real project data.
+- **Updates for citizens:** when someone's report reaches the priority list, they get one message
+  on Telegram (WhatsApp once Meta approves a message template). Their chat ID is stored locked
+  (encrypted), used once, then deleted — or deleted after 6 months if never used.
+- 101 automatic tests, all passing. The Docker version was tested end to end too.
 
 **Two honest corrections the rewrite forced:**
 1. **We have no real spending data.** The old dashboard's budget lines were made up by the old

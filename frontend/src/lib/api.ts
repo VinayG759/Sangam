@@ -67,7 +67,7 @@ export interface Pack {
   min_distinct_reporters: number
   weights: Record<string, number>
   needs: Need[]
-  features: { simulator: boolean; export: boolean; web_intake: boolean }
+  features: { simulator: boolean; export: boolean; web_intake: boolean; impact: boolean }
 }
 
 export interface Fact {

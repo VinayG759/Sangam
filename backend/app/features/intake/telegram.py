@@ -5,10 +5,11 @@ import logging
 import httpx
 
 from app.core.config import get_settings
+from app.core.messaging import TELEGRAM_API as API
+from app.core.messaging import send_telegram as send  # noqa: F401  (the router replies through this)
 from app.features.intake.service import Inbound
 
 log = logging.getLogger(__name__)
-API = "https://api.telegram.org"
 WELCOME = ("Namaskara! Tell us about a problem with water, roads, electricity, health, schools or sanitation "
            "in your area. Send a voice note, a photo or a message in your own language, and say where it is.")
 
@@ -20,7 +21,8 @@ def parse_update(update: dict) -> tuple[int, Inbound] | None:
         return None
     chat_id = message["chat"]["id"]
     sender = str((message.get("from") or {}).get("id", chat_id))
-    inbound = Inbound(channel="telegram", sender_id=sender, text=message.get("text") or message.get("caption"))
+    inbound = Inbound(channel="telegram", sender_id=sender, text=message.get("text") or message.get("caption"),
+                      reply_to=str(chat_id))
     if location := message.get("location"):
         inbound.lat, inbound.lon = location["latitude"], location["longitude"]
     if voice := (message.get("voice") or message.get("audio")):
@@ -40,10 +42,3 @@ def _download(file_id: str) -> bytes | None:
         log.error("Telegram media download failed: %s", exc)
         return None
 
-
-def send(chat_id: int, text: str) -> None:
-    token = get_settings().TELEGRAM_BOT_TOKEN
-    try:
-        httpx.post(f"{API}/bot{token}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=15)
-    except Exception as exc:
-        log.error("Telegram send failed: %s", exc)

@@ -8,6 +8,7 @@ import PriorityDetailPage from '@/features/priorities/DetailPage'
 import MapPage from '@/features/map/Page'
 import SimulatorPage from '@/features/simulator/Page'
 import ReportsPage from '@/features/reports/Page'
+import ImpactPage from '@/features/impact/Page'
 import CitizenReportPage from '@/features/citizen-report/ReportPage'
 import TrackPage from '@/features/citizen-report/TrackPage'
 
@@ -22,6 +23,7 @@ export const routes: RouteObject[] = [
       { path: '/priorities/:id', element: <PriorityDetailPage />, errorElement: <RouteError /> },
       { path: '/map', element: <MapPage />, errorElement: <RouteError /> },
       { path: '/simulator', element: <SimulatorPage />, errorElement: <RouteError /> },
+      { path: '/impact', element: <ImpactPage />, errorElement: <RouteError /> },
       { path: '/reports', element: <ReportsPage />, errorElement: <RouteError /> },
       { path: '*', element: <RouteError /> },
     ],

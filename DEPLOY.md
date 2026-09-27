@@ -29,6 +29,9 @@ Environment variables (see `backend/.env.example` for what each one does):
 | `GEMINI_API_KEY` | AI Studio key |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | bot token; a secret you choose |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET` | from the Meta app |
+| `CONTACT_ENCRYPTION_KEY` | encrypts citizens' chat IDs for status updates (leave empty to store none) |
+| `PUBLIC_APP_URL` | your Vercel URL, for tracking links in updates |
+| `WHATSAPP_NOTIFY_TEMPLATE` | name of the approved WhatsApp template (optional, see below) |
 | `SEED_DEMO` | `true` for the first deploy only (loads synthetic demo reports), then `false` |
 
 On every start the container runs migrations, loads the country pack, and starts the API.
@@ -48,6 +51,12 @@ https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<RENDER_URL>/api
 
 **WhatsApp** — in the Meta app, set the webhook URL to `<RENDER_URL>/api/v1/webhooks/whatsapp` with your
 `WHATSAPP_VERIFY_TOKEN`, and subscribe to `messages`.
+
+**WhatsApp status updates (optional)** — WhatsApp only allows free-text messages within 24 hours of the
+citizen's last message, so later updates need a template approved by Meta. In WhatsApp Manager create a
+*Utility* template, e.g. `report_update`, body: `Update on your report {{1}}: {{2}}`. Once approved, set
+`WHATSAPP_NOTIFY_TEMPLATE=report_update`. Until then, Telegram users get updates and WhatsApp users can
+use the tracking page.
 
 ## 5. First analysis run
 

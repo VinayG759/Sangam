@@ -137,6 +137,21 @@ class ReportMedia(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Contact(Base):
+    """
+    The encrypted chat ID for one report, kept only so the citizen can be told when
+    it is prioritised. Deleted after that message, or at expires_at.
+    """
+
+    __tablename__ = "contacts"
+
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id", ondelete="CASCADE"), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(20))
+    address_encrypted: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class Conversation(Base):
     """The single pending follow-up question for one reporter (location or confirmation)."""
 
