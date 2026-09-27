@@ -2,7 +2,7 @@
 
 /*
  * Design tokens. Neutral surfaces, one accent, and colour reserved for meaning
- * (the five verdicts). Every colour is a variable so dark mode is one block.
+ * (the six verdicts). Every colour is a variable so dark mode is one block.
  */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -23,6 +23,8 @@
   --color-delivery-soft: var(--delivery-soft);
   --color-stalled: var(--stalled);
   --color-stalled-soft: var(--stalled-soft);
+  --color-planned: var(--planned);
+  --color-planned-soft: var(--planned-soft);
   --color-hotspot: var(--hotspot);
   --color-hotspot-soft: var(--hotspot-soft);
   --color-monitor: var(--monitor);
@@ -46,6 +48,8 @@
   --delivery-soft: #fef3e6;
   --stalled: #7a3fb0;
   --stalled-soft: #f3ecfa;
+  --planned: #a3136f;
+  --planned-soft: #fbeaf4;
   --hotspot: #1d5fa8;
   --hotspot-soft: #e8f0fa;
   --monitor: #6b6763;
@@ -71,6 +75,8 @@
     --delivery-soft: #36260f;
     --stalled: #c09be6;
     --stalled-soft: #2c2138;
+    --planned: #e88bc4;
+    --planned-soft: #37192b;
     --hotspot: #7fb0ec;
     --hotspot-soft: #1a2638;
     --monitor: #a8a29e;

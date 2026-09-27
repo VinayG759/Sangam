@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router'
 import { formatMoney, formatNumber, formatRatio } from '@/lib/format'
 import { inGroup } from '@/lib/verdicts'
+import { treeOrder, withRegion } from '@/lib/regions'
 import { filterPriorities } from '@/features/priorities/filter'
 import type { PriorityRow } from '@/features/priorities/api'
 import { Figure } from '@/ui/Figure'
@@ -23,6 +24,7 @@ describe('action groups', () => {
     expect(inGroup('DELIVERY_GAP', 'audit')).toBe(true)
     expect(inGroup('STALLED_ALLOCATION', 'audit')).toBe(true)
     expect(inGroup('UNSERVED_GAP', 'audit')).toBe(false)
+    expect(inGroup('PLANNED_NOT_STARTED', 'audit')).toBe(true)
     expect(inGroup('MONITOR', 'all')).toBe(true)
   })
 })
@@ -77,5 +79,23 @@ describe('error isolation', () => {
     expect(await screen.findByText('This page hit an error')).toBeInTheDocument()
     expect(screen.getByText('map exploded')).toBeInTheDocument()
     expect(screen.getByText('Sidebar')).toBeInTheDocument()
+  })
+})
+
+describe('region scope', () => {
+  it('lists places parent-first, children alphabetically beneath', () => {
+    const regions = [
+      { id: 'b2', name: 'Zed', level: 2, parent_id: 's' },
+      { id: 's', name: 'State', level: 1, parent_id: 'IN' }, // parent is the country, not in the list
+      { id: 'b1', name: 'Alpha', level: 2, parent_id: 's' },
+      { id: 'k', name: 'Block', level: 3, parent_id: 'b2' },
+    ]
+    expect(treeOrder(regions).map((r) => [r.name, r.depth])).toEqual([['State', 0], ['Alpha', 1], ['Zed', 1], ['Block', 2]])
+  })
+
+  it('carries the region onto links', () => {
+    expect(withRegion('/priorities', '')).toBe('/priorities')
+    expect(withRegion('/priorities', 'KA-1')).toBe('/priorities?region=KA-1')
+    expect(withRegion('/priorities?group=fund', 'KA 1')).toBe('/priorities?group=fund&region=KA%201')
   })
 })

@@ -12,6 +12,7 @@ statistics and public spending** — the join that complaint systems never make.
 | **Unserved gap** | Many residents report the problem; official data says the place is not served | Fund |
 | **Delivery gap** | Official data says the place *is* served; many residents say otherwise | Audit |
 | **Stalled allocation** | Money is committed here; residents still report the problem | Audit |
+| **Planned, not started** | Money is only planned here, no work has begun; residents report the problem | Audit |
 | **Demand hotspot** | Many residents report the problem; no official data loaded yet to compare | Verify |
 | **Monitor** | Demand close to the typical place | Monitor |
 

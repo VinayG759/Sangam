@@ -25,6 +25,7 @@ VERDICT_WORDS = {
     "UNSERVED_GAP": "recommended for funding",
     "DELIVERY_GAP": "recommended for a delivery audit",
     "STALLED_ALLOCATION": "recommended for a delivery audit",
+    "PLANNED_NOT_STARTED": "recommended for an audit of why planned work has not started",
     "DEMAND_HOTSPOT": "flagged for officials to verify",
     "MONITOR": "being monitored",
 }

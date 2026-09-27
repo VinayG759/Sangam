@@ -24,7 +24,7 @@ TOO_EARLY = "TOO_EARLY"
 
 def progress_label(verdict: str | None) -> str:
     """From the analysis verdict for the same place and need (None = no shown priority)."""
-    if verdict in ("DELIVERY_GAP", "STALLED_ALLOCATION"):
+    if verdict in ("DELIVERY_GAP", "STALLED_ALLOCATION", "PLANNED_NOT_STARTED"):
         return NOT_REACHING
     if verdict == "UNSERVED_GAP":
         return STILL_SHORT

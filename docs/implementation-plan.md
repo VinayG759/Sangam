@@ -45,7 +45,8 @@ tested and committed locally; **nothing is deployed yet**. What it delivered, ma
 | Phase 3 SaaS-grade UI | **Done** — checked in a real browser at desktop and phone width |
 | Phase 7.2 media retention | **Done** — each analysis run deletes raw media older than the pack's limit |
 | Phase 4 impact + close the loop | **Done** — `features/impact` (JJM 2019→2026 progress vs residents, real data now; before/after-project comparison, switches on when project data exists) and `features/notify` (encrypted chat IDs, one update, then deleted; 180-day expiry). WhatsApp updates need a Meta-approved template |
-| Tests | 95 backend (real Postgres) + 6 frontend, all passing; the Docker image builds and passes the smoke test |
+| Phase 5 national view | **Done** — region picker (`?region=`) scopes Overview and Priorities to a place and everything under it; `/rollup` ranks the places one level down by how many places inside need action; `/unlocated` counts unplaced reports **by reason only** (migration `0003`, `reports.location_failure`); new verdict `PLANNED_NOT_STARTED` (Audit group). Checked in a real browser: Overview → district → block → recommendation in three clicks |
+| Tests | 106 backend (real Postgres) + 8 frontend, all passing; the Docker image builds and passes the smoke test (Docker not re-run after Phase 5) |
 
 **Two corrections the rewrite forced — both about honesty:**
 
@@ -135,10 +136,10 @@ test of whether the product answers the brief; every phase below maps to a row.
 | Break in the loop | Statement wording | Status | Closed by |
 |-------------------|-------------------|--------|-----------|
 | Voice doesn't arrive | "aggregates citizen development requests via voice, text, and messaging apps across diverse linguistic regions" | ✅ Built (Telegram, WhatsApp, web; voice/photo/text) | — |
-| Voice isn't aligned with data | "analyse large datasets combining citizen feedback with national demographic data, infrastructure indices, and public investment plans" | ✅ Built for sanctioned spend; ⚠️ forward *investment plans* not modelled | Phase 5 (planned-status projects) |
+| Voice isn't aligned with data | "analyse large datasets combining citizen feedback with national demographic data, infrastructure indices, and public investment plans" | ✅ Engine handles sanctioned and planned money (`PLANNED_NOT_STARTED`, Phase 5); ⚠️ no real project data loaded yet | Data work (after submission) |
 | Money isn't steered | "surfacing demand hotspots and recommending high-priority development projects" | ✅ Built (scoring, verdicts, hotspots, simulator, PDF brief) | — |
 | **Nobody measures impact** | "no way to measure the impact of large-scale DPI initiatives" | ❌ **Not built** | **Phase 4** |
-| National audience | "to national policymakers" | ⚠️ Deep for one state, no national roll-up | Phase 5 |
+| National audience | "to national policymakers" | ✅ Roll-up and region picker built (Phase 5); ⚠️ only Karnataka's data is loaded, so the view opens on its districts | More states' data |
 | Cross-country | "across BRICS nations" | ⚠️ Architecturally supported, Brazil pack is a stub | Pitch framing (Phase 1.6) now; Phase 6 after submission |
 
 ---
@@ -323,7 +324,7 @@ frontend/src/
 | 4th | 6.2–6.4 | Second country live | Validate, multi-pack serving, live switch | 1–2 days | After Phase 2 | Not started |
 | 5th | 4 | Impact measurement + close the loop | Answer the "measure impact" part of the brief | 2–3 days | After Phase 6 | ✅ Done early (27 Sep) |
 | 6th | 3 | SaaS-grade UI | Dashboard a ministry would take seriously | 3–4 days | After Phase 4 | ✅ Done early (rewrite) |
-| 7th | 5 | National view + reach metrics + investment plans | "National policymakers", "Depth & Reach" | 2–3 days | After Phase 3 | Not started |
+| 7th | 5 | National view + reach metrics + investment plans | "National policymakers", "Depth & Reach" | 2–3 days | After Phase 3 | ✅ Done early (27 Sep) — see "As built" in §7 |
 | 8th | 7 | Security & DPG hardening | Signed briefs, retention job, DPGA application | 2 days | Before finale | Not started |
 | — | 8 | Deferred / cut | Explicitly *not* doing | — | — | — |
 
@@ -710,6 +711,31 @@ status; coverage metrics against a seeded fixture.
 **Exit criteria.** A user can go from national → state → district → one recommendation in
 three clicks; coverage panel numbers match SQL counts.
 
+**As built (27 Sep).**
+- **Region scope.** `GET /overview` and `GET /priorities` take `?region=<id>` and include that
+  place and every place under it (`app/core/regions.py`). One picker (`ui/RegionPicker.tsx`)
+  on both pages, kept in the URL. At region scope, `reports.unlocated` is `null`: an unplaced
+  report is inside no region.
+- **Roll-up.** `GET /rollup?region=` lists the places one level down, each with its verdict
+  counts and `places_needing_action` (distinct places inside with a fund or audit verdict),
+  sorted by that count. With no region it skips any chain of single children, so India
+  (one state loaded) opens on Karnataka's districts. Only displayable priorities are counted.
+  **Changed from the plan:** no "stalled capital" column — there is no real spending data (D-20).
+- **Unlocated drill-down.** `GET /unlocated` returns `{total, reasons: [{reason, count}]}` and
+  nothing else — never text, tracking IDs or dates (D-24). Reasons are recorded when they
+  happen, in `reports.location_failure` (migration `0003`): `no_place_named`,
+  `place_not_recognised`, `low_confidence_match`, `gave_up_after_questions`; plus
+  `awaiting_place` / `awaiting_confirmation` from status, and `not_recorded` for older rows
+  (no guessed backfill). Also fixed: a reprocessed report whose GPS point matched no place was
+  left as `understood`; it is now `unlocated` with a reason.
+- **Planned money.** Verdict order is now stalled → delivery → **planned** → hotspot → unserved:
+  high demand with only `planned` projects is `PLANNED_NOT_STARTED`, in the Audit group (D-23),
+  unless official data says the place is served (then `DELIVERY_GAP`). It never appears in the
+  demo because no project data is loaded.
+- **Tests.** Region scope, roll-up ordering, roll-up sums equal the whole, unlocated
+  counts-only (asserts no text in the response), failure reasons at each intake path, and the
+  planned-money verdict table.
+
 ---
 
 ### Phase 6 — Second country pack, live
@@ -984,6 +1010,8 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-19 | Rewrite now vs patch | **Full rewrite now** (Vinay's decision); production keeps the old code until the new version passes its checks and Vinay approves a deploy | 27 Sep |
 | D-20 | Spending data | **Never invented.** Verdicts join demand to real statistics; `DEMAND_HOTSPOT` where no statistic exists | 27 Sep |
 | D-21 | Ranking order | Fund/audit verdicts first, then hotspots to verify, then monitor; score orders within each tier | 27 Sep |
+| D-23 | Action group for `PLANNED_NOT_STARTED` | **Audit** — money is promised but nothing started; the official's question is "why is this stuck?", as for a stalled allocation. No fifth action group | 27 Sep |
+| D-24 | Unlocated reports drill-down | **Counts by reason only, never report text** (Vinay). Text is shown only for a place × need with ≥ 5 distinct reporters (D-10); an unlocated report has no place, so it can never qualify | 27 Sep |
 | D-22 | Production database for v2 | **Pending — Vinay's decision:** new empty Supabase project (recommended) or reset the existing one | — |
 
 ---

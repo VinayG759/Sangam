@@ -34,6 +34,14 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     soft: 'bg-stalled-soft',
     hex: '#7a3fb0',
   },
+  PLANNED_NOT_STARTED: {
+    label: 'Planned, not started',
+    action: 'Audit',
+    meaning: 'Money is planned for this place but no work has started, and many residents report the problem.',
+    text: 'text-planned',
+    soft: 'bg-planned-soft',
+    hex: '#a3136f',
+  },
   DEMAND_HOTSPOT: {
     label: 'Demand hotspot',
     action: 'Verify',
@@ -52,14 +60,21 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
   },
 }
 
-export const VERDICT_ORDER: Verdict[] = ['UNSERVED_GAP', 'DELIVERY_GAP', 'STALLED_ALLOCATION', 'DEMAND_HOTSPOT', 'MONITOR']
+export const VERDICT_ORDER: Verdict[] = [
+  'UNSERVED_GAP',
+  'DELIVERY_GAP',
+  'STALLED_ALLOCATION',
+  'PLANNED_NOT_STARTED',
+  'DEMAND_HOTSPOT',
+  'MONITOR',
+]
 
 export type ActionGroup = 'all' | 'fund' | 'audit' | 'verify' | 'monitor'
 
 export const ACTION_GROUPS: { key: ActionGroup; label: string; verdicts: Verdict[] }[] = [
   { key: 'all', label: 'All', verdicts: VERDICT_ORDER },
   { key: 'fund', label: 'Fund', verdicts: ['UNSERVED_GAP'] },
-  { key: 'audit', label: 'Audit', verdicts: ['DELIVERY_GAP', 'STALLED_ALLOCATION'] },
+  { key: 'audit', label: 'Audit', verdicts: ['DELIVERY_GAP', 'STALLED_ALLOCATION', 'PLANNED_NOT_STARTED'] },
   { key: 'verify', label: 'Verify', verdicts: ['DEMAND_HOTSPOT'] },
   { key: 'monitor', label: 'Monitor', verdicts: ['MONITOR'] },
 ]

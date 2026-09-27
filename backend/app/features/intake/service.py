@@ -251,7 +251,7 @@ def _answer_follow_up(db: Session, pack: Pack, pending: Conversation, msg: Inbou
 
     pending.attempts += 1
     if pending.attempts > MAX_LOCATION_ATTEMPTS:
-        report.status = "unlocated"
+        report.status, report.location_failure = "unlocated", "gave_up_after_questions"
         _close_conversation(db, report.reporter_hash)
         db.commit()
         return Outcome(f"Thank you. We could not find that place, but your report {report.tracking_id} "
@@ -310,12 +310,19 @@ def reprocess_pending(db: Session, ai: AIClient, pack: Pack, limit: int = 20) ->
                     match = gazetteer.nearest(report.lat, report.lon)
                     if match:
                         _locate(report, match, "gps")
+                    else:
+                        report.status, report.location_failure = "unlocated", "place_not_recognised"
                 else:
+                    # The citizen can no longer be asked, so record why the place could not be found.
                     match = gazetteer.resolve(u.place_names) if u.place_names else None
                     if match and match.score >= pack.thresholds.location_accept:
                         _locate(report, match, "text")
                     else:
-                        report.status = "unlocated"  # the citizen can no longer be asked
+                        report.status = "unlocated"
+                        report.location_failure = (
+                            "no_place_named" if not u.place_names else
+                            "low_confidence_match" if match and match.score >= pack.thresholds.location_confirm
+                            else "place_not_recognised")
                 if media:
                     db.delete(media)
             if report.embedding is None and report.text_en:

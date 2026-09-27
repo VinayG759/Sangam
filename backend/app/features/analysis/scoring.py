@@ -23,6 +23,7 @@ UNSERVED_GAP = "UNSERVED_GAP"  # high demand, official data says NOT served, no 
 DEMAND_HOTSPOT = "DEMAND_HOTSPOT"  # high demand, no official data to compare against yet → investigate
 STALLED_ALLOCATION = "STALLED_ALLOCATION"  # high demand, money committed but not delivered → audit
 DELIVERY_GAP = "DELIVERY_GAP"  # high demand, official data says served → audit delivery
+PLANNED_NOT_STARTED = "PLANNED_NOT_STARTED"  # high demand, money only planned, nothing started → audit
 MONITOR = "MONITOR"  # demand near the norm
 
 
@@ -83,6 +84,8 @@ def verdict(high_demand: bool, projects: list[ProjectFact], value: float | None,
         value >= served_threshold if higher_is_better else value <= served_threshold)
     if officially_served or any(p.status == "completed" for p in projects):
         return DELIVERY_GAP
+    if any(p.status == "planned" for p in projects):
+        return PLANNED_NOT_STARTED
     if value is None:
         # Without a statistic we cannot say the place is unserved — only that it is loud.
         return DEMAND_HOTSPOT

@@ -2,8 +2,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Search, TrendingUp } from 'lucide-react'
 import { formatNumber, formatRatio } from '@/lib/format'
 import { usePack } from '@/lib/pack'
+import { useRegionParam } from '@/lib/regions'
 import { ACTION_GROUPS, type ActionGroup, inGroup } from '@/lib/verdicts'
 import { inputStyle, PageHeader, Segmented } from '@/ui/primitives'
+import { RegionPicker } from '@/ui/RegionPicker'
 import { EmptyState, ErrorState, Skeleton } from '@/ui/states'
 import { VerdictBadge } from '@/ui/VerdictBadge'
 import { usePriorities } from './api'
@@ -13,7 +15,8 @@ export default function PrioritiesPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const pack = usePack()
-  const query = usePriorities()
+  const [region, setRegion] = useRegionParam()
+  const query = usePriorities(region)
 
   const group = (params.get('group') as ActionGroup) || 'all'
   const need = params.get('need') ?? ''
@@ -52,6 +55,7 @@ export default function PrioritiesPage() {
             ),
           }))}
         />
+        <RegionPicker value={region} onChange={setRegion} />
         <select aria-label="Need" className={inputStyle} value={need} onChange={(e) => update('need', e.target.value)}>
           <option value="">All needs</option>
           {pack.data?.needs.map((n) => (

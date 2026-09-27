@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.pack import Pack, get_pack
+from app.core.regions import country_regions, subtree_ids
 from app.core.runs import latest_complete_run
 from app.models import Cluster, Priority, Region, Report
 
@@ -39,7 +40,11 @@ def _row(priority: Priority, cluster: Cluster, regions: dict[str, Region], pack:
 
 @router.get("/priorities")
 def list_priorities(verdict: str | None = None, sector: str | None = None, q: str | None = None,
-                    limit: int = Query(100, le=500), db: Session = Depends(get_db), pack: Pack = Depends(get_pack)):
+                    region: str | None = None, limit: int = Query(100, le=500),
+                    db: Session = Depends(get_db), pack: Pack = Depends(get_pack)):
+    regions = country_regions(db, pack.country_code)
+    if region and region not in regions:
+        raise HTTPException(status_code=404, detail="Region not found")
     run = latest_complete_run(db, pack.country_code)
     if not run:
         return {"run": None, "items": []}
@@ -49,7 +54,8 @@ def list_priorities(verdict: str | None = None, sector: str | None = None, q: st
         query = query.where(Priority.verdict == verdict)
     if sector:
         query = query.where(Priority.sector == sector)
-    regions = {r.id: r for r in db.scalars(select(Region).where(Region.country_code == pack.country_code))}
+    if region:
+        query = query.where(Priority.region_id.in_(subtree_ids(regions, region)))
     items = [_row(p, c, regions, pack) for p, c in db.execute(query).all()]
     if q:
         needle = q.casefold()

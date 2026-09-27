@@ -112,6 +112,9 @@ class Report(Base):
     sector: Mapped[str | None] = mapped_column(String(50), index=True)
     urgency: Mapped[int | None] = mapped_column(Integer)
     location_text: Mapped[str | None] = mapped_column(Text)
+    # Why an unlocated report could not be placed: no_place_named | place_not_recognised |
+    # low_confidence_match | gave_up_after_questions. NULL for located reports.
+    location_failure: Mapped[str | None] = mapped_column(String(32))
     region_id: Mapped[str | None] = mapped_column(ForeignKey("regions.id"), index=True)
     location_method: Mapped[str | None] = mapped_column(String(10))  # gps|text|picker
     location_confidence: Mapped[float | None] = mapped_column(Float)

@@ -73,6 +73,6 @@ def simulate(body: SimulationRequest, db: Session = Depends(get_db), pack: Pack 
         "budget": body.budget, "total_cost": round(spent), "remaining": round(body.budget - spent),
         "beneficiaries": sum(c["beneficiaries"] for c in funded), "candidates": len(candidates),
         "funded": funded,
-        "audit_count": sum(1 for p in priorities if p.verdict in ("STALLED_ALLOCATION", "DELIVERY_GAP")),
+        "audit_count": sum(1 for p in priorities if p.verdict in ("STALLED_ALLOCATION", "DELIVERY_GAP", "PLANNED_NOT_STARTED")),
         "notes": notes,
     }

@@ -22,7 +22,7 @@ function navClass({ isActive }: { isActive: boolean }) {
 
 export function Layout() {
   const pack = usePack()
-  const overview = useOverview()
+  const overview = useOverview('') // whole country: the demo-data notice is not region-specific
   const synthetic = overview.data?.reports.synthetic ?? 0
 
   return (

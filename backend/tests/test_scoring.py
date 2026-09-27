@@ -4,6 +4,7 @@ from app.features.analysis.scoring import (
     DELIVERY_GAP,
     DEMAND_HOTSPOT,
     MONITOR,
+    PLANNED_NOT_STARTED,
     STALLED_ALLOCATION,
     UNSERVED_GAP,
     ClusterInput,
@@ -25,7 +26,11 @@ WEIGHTS = {"demand": 0.35, "deficit": 0.30, "reach": 0.15, "coverage": 0.20}
     (True, [ProjectFact("completed", 100)], 20, DELIVERY_GAP),
     (True, [], 20, UNSERVED_GAP),
     (True, [], None, DEMAND_HOTSPOT),
-    (True, [ProjectFact("planned", 100)], 20, UNSERVED_GAP),
+    (True, [ProjectFact("planned", 100)], 20, PLANNED_NOT_STARTED),
+    (True, [ProjectFact("planned", 100)], None, PLANNED_NOT_STARTED),  # the plan is known even without a statistic
+    (True, [ProjectFact("planned", 100)], 95, DELIVERY_GAP),  # records say served: residents disagree
+    (True, [ProjectFact("planned", 100), ProjectFact("in_progress", 50)], 20, STALLED_ALLOCATION),
+    (False, [ProjectFact("planned", 100)], 20, MONITOR),
 ])
 def test_verdict_table(high, projects, value, expected):
     assert verdict(high, projects, value, served_threshold=80, higher_is_better=True) == expected

@@ -219,3 +219,66 @@ def test_admin_can_start_a_run(client, loaded):
     assert response.status_code == 202
     runs = client.get("/api/v1/admin/runs", headers=ADMIN).json()
     assert runs[0]["id"] == response.json()["run_id"] and runs[0]["status"] == "complete"
+
+
+# ── National view: region scope, roll-up, unlocated reports ────────────────
+
+
+def test_region_filter_scopes_priorities_and_overview_to_the_places_below(client, ai, loaded):
+    analysed(ai, loaded)
+    items = client.get("/api/v1/priorities", params={"region": "TL-A-NORTH"}).json()["items"]
+    assert {i["region"]["name"] for i in items} == {"Northfield", "Riverton"}
+    body = client.get("/api/v1/overview", params={"region": "TL-A-NORTH"}).json()
+    assert body["region"] == {"id": "TL-A-NORTH", "name": "Northfield"}
+    assert body["reports"]["total"] == 15 and body["verdicts"] == {"DELIVERY_GAP": 1, "MONITOR": 1}
+    assert body["reports"]["unlocated"] is None  # unlocated reports have no place to be inside
+    assert client.get("/api/v1/priorities", params={"region": "NOWHERE"}).status_code == 404
+    assert client.get("/api/v1/overview", params={"region": "NOWHERE"}).status_code == 404
+
+
+def test_rollup_ranks_districts_by_places_needing_action(client, ai, loaded):
+    analysed(ai, loaded)
+    body = client.get("/api/v1/rollup").json()
+    # The country has one state, so the roll-up opens on that state's districts.
+    assert body["parent"]["name"] == "Alpha State" and body["level_name"] == "district"
+    assert [i["name"] for i in body["items"][:3]] == ["Northfield", "Eastbrook", "Southmere"]
+    north = body["items"][0]
+    assert north["places_needing_action"] == 1 and north["verdicts"] == {"DELIVERY_GAP": 1, "MONITOR": 1}
+    assert all(i["places_needing_action"] == 0 and i["verdicts"] == {} for i in body["items"][3:])
+
+    inner = client.get("/api/v1/rollup", params={"region": "TL-A-NORTH"}).json()
+    assert inner["level_name"] == "block" and [p["name"] for p in inner["path"]] == ["Alpha State", "Northfield"]
+    assert {i["name"] for i in inner["items"]} == {"Riverton", "Hillview"}
+
+
+def test_rollup_counts_equal_the_sum_of_their_parts(client, ai, loaded):
+    analysed(ai, loaded)
+    districts = client.get("/api/v1/rollup").json()["items"]
+    whole = client.get("/api/v1/overview").json()["verdicts"]
+    summed: dict[str, int] = {}
+    for d in districts:
+        for verdict, n in d["verdicts"].items():
+            summed[verdict] = summed.get(verdict, 0) + n
+    assert summed == whole
+
+
+def test_unlocated_reports_are_counted_by_reason_and_never_shown(client, loaded):
+    from app.features.intake.service import new_tracking_id
+
+    secret = "the pump near my house on 4th cross is broken"
+    with new_session() as db:
+        for status, failure in [("unlocated", "no_place_named"), ("unlocated", "no_place_named"),
+                                ("unlocated", "gave_up_after_questions"), ("unlocated", None),
+                                ("needs_location", None), ("located", None)]:
+            db.add(Report(tracking_id=new_tracking_id(), country_code="TL", channel="telegram",
+                          reporter_hash=new_tracking_id(), status=status, location_failure=failure,
+                          text_original=secret, text_en=secret, sector="water",
+                          region_id="TL-A-NORTH" if status == "located" else None))
+        db.commit()
+    response = client.get("/api/v1/unlocated")
+    body = response.json()
+    assert body["total"] == 5
+    assert {r["reason"]: r["count"] for r in body["reasons"]} == {
+        "no_place_named": 2, "gave_up_after_questions": 1, "not_recorded": 1, "awaiting_place": 1}
+    assert all(set(r) == {"reason", "count"} for r in body["reasons"])
+    assert "pump" not in response.text

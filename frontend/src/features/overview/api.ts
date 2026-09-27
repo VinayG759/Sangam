@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { get, type Verdict } from '@/lib/api'
+import { withRegion } from '@/lib/regions'
 
 export interface Overview {
   country_code: string
+  region: { id: string; name: string } | null
   run: { id: number; completed_at: string } | null
   reports: {
     total: number
     located: number
-    unlocated: number
+    unlocated: number | null // null when scoped to a region: unlocated reports belong to no place
     awaiting_processing: number
     flagged_coordinated: number
     synthetic: number
@@ -30,13 +32,42 @@ export interface TopPriority {
   is_emerging: boolean
 }
 
-export function useOverview() {
-  return useQuery({ queryKey: ['overview'], queryFn: () => get<Overview>('/api/v1/overview') })
+export interface Rollup {
+  parent: { id: string; name: string } | null
+  path: { id: string; name: string }[]
+  level_name: string | null
+  items: {
+    id: string
+    name: string
+    has_children: boolean
+    places_needing_action: number
+    verdicts: Partial<Record<Verdict, number>>
+  }[]
 }
 
-export function useTopPriorities() {
+export interface Unlocated {
+  total: number
+  reasons: { reason: string; count: number }[]
+}
+
+export function useOverview(region: string) {
   return useQuery({
-    queryKey: ['priorities', 'top'],
-    queryFn: () => get<{ items: TopPriority[] }>('/api/v1/priorities?limit=8'),
+    queryKey: ['overview', region],
+    queryFn: () => get<Overview>(withRegion('/api/v1/overview', region)),
   })
+}
+
+export function useTopPriorities(region: string) {
+  return useQuery({
+    queryKey: ['priorities', 'top', region],
+    queryFn: () => get<{ items: TopPriority[] }>(withRegion('/api/v1/priorities?limit=8', region)),
+  })
+}
+
+export function useRollup(region: string) {
+  return useQuery({ queryKey: ['rollup', region], queryFn: () => get<Rollup>(withRegion('/api/v1/rollup', region)) })
+}
+
+export function useUnlocated(enabled: boolean) {
+  return useQuery({ queryKey: ['unlocated'], queryFn: () => get<Unlocated>('/api/v1/unlocated'), enabled })
 }

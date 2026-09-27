@@ -121,3 +121,28 @@ def test_identical_messages_from_many_people_are_flagged(db, ai, loaded):
 def test_local_need_label_is_used_in_reply(db, ai, loaded):
     ai.places, ai.language = ["Riverton"], "xx"
     assert "Wasser" in send(db, ai, loaded, "kein Wasser").reply
+
+
+def test_giving_up_records_why(db, ai, loaded):
+    send(db, ai, loaded, "No water")
+    for answer in ["qqqq zzzz", "xxxx yyyy", "wwww vvvv"]:
+        send(db, ai, loaded, answer)
+    assert only_report(db).location_failure == "gave_up_after_questions"
+
+
+def test_reprocessed_report_without_a_place_records_why(db, ai, loaded):
+    ai.down = True
+    send(db, ai, loaded, "No water")
+    ai.down = False
+    reprocess_pending(db, ai, loaded)
+    report = only_report(db)
+    assert report.status == "unlocated" and report.location_failure == "no_place_named"
+
+
+def test_reprocessed_report_with_an_unknown_place_records_why(db, ai, loaded):
+    ai.down = True
+    send(db, ai, loaded, "No water in Qzxwv")
+    ai.down, ai.places = False, ["Qzxwv"]
+    reprocess_pending(db, ai, loaded)
+    report = only_report(db)
+    assert report.status == "unlocated" and report.location_failure == "place_not_recognised"

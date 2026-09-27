@@ -121,7 +121,15 @@ approve a deploy.
 - **Updates for citizens:** when someone's report reaches the priority list, they get one message
   on Telegram (WhatsApp once Meta approves a message template). Their chat ID is stored locked
   (encrypted), used once, then deleted — or deleted after 6 months if never used.
-- 101 automatic tests, all passing. The Docker version was tested end to end too.
+- **Whole-country view (Phase 5):** a place picker on Overview and Priorities; a table
+  ranking districts (then blocks) by how many places need action, which you click to zoom in;
+  and a count of reports we couldn't place on the map, broken down by *why* — counts only,
+  never the report text (your rule: text needs 5 different people in the same place and need,
+  and these reports have no place). Overview → district → block → recommendation is three clicks.
+- **Planned money:** a new verdict, "Planned, not started" (an **Audit** action), for places
+  with high need where money is only planned. It won't show in the demo — we have no project data.
+- 114 automatic tests (106 backend, 8 dashboard), all passing. The Docker version was tested
+  end to end before Phase 5.
 
 **Two honest corrections the rewrite forced:**
 1. **We have no real spending data.** The old dashboard's budget lines were made up by the old
@@ -149,7 +157,7 @@ The problem statement is really describing a **broken loop**:
 | Their voice is compared with real data (population, water coverage, budgets) | ✅ Yes |
 | This tells the government where to spend | ✅ Yes |
 | **Someone checks whether the spending actually worked** | ❌ **No — this is our gap** (Phase 4 fixes it) |
-| National leaders can see the whole country, not just one state | ⚠️ Partly (Phase 5 fixes it) |
+| National leaders can see the whole country, not just one state | ✅ Built (Phase 5) — but only Karnataka's data is loaded so far |
 
 ---
 
@@ -482,6 +490,11 @@ but have no whole-country view. And 20% of the score is "Depth & Reach."
 
 **How we'll know it's done:** you can go from the whole country to one specific
 recommendation in three clicks.
+
+**✅ Built 27 Sep.** Two changes from the plan above: (1) no "stuck money" ranking, because we
+have no real spending data — districts are ranked by how many places need action instead;
+(2) the unplaced-reports panel shows counts by reason only, never the text. Only Karnataka is
+loaded, so the view opens on Karnataka's districts.
 
 ---
 

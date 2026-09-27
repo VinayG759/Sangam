@@ -21,6 +21,7 @@ from app.features.analysis.scoring import (
     DELIVERY_GAP,
     DEMAND_HOTSPOT,
     MONITOR,
+    PLANNED_NOT_STARTED,
     STALLED_ALLOCATION,
     UNSERVED_GAP,
     ClusterInput,
@@ -245,6 +246,10 @@ def _template(pack: Pack, region: Region, s: Scored, facts: list[dict]) -> str:
         return (f"Public money is already committed to {need} in {region.name}, yet {reporters} residents still "
                 f"report problems, {ratio} times the median place.{official_text} "
                 "Recommended action: audit why the allocation has not reached people.")
+    if s.verdict == PLANNED_NOT_STARTED:
+        return (f"Public money for {need} in {region.name} is planned but no work has started, while "
+                f"{reporters} residents report problems, {ratio} times the median place.{official_text} "
+                "Recommended action: audit why the planned work has not begun.")
     if s.verdict == UNSERVED_GAP:
         return (f"{reporters} residents of {region.name} report {need} problems, {ratio} times the median place."
                 f"{official_text} That is below the level counted as served. "
@@ -261,6 +266,7 @@ VERDICT_CONTEXT = {
     UNSERVED_GAP: "high citizen demand and the official statistic is below the level counted as served; the recommendation is to consider funding. Do not claim anything about projects or budgets that is not in the facts",
     STALLED_ALLOCATION: "high citizen demand although money is already committed; the recommendation is a delivery audit",
     DELIVERY_GAP: "high citizen demand although official statistics say the place is served; the recommendation is a delivery audit",
+    PLANNED_NOT_STARTED: "high citizen demand; money is planned for this place but no work has started; the recommendation is to audit why the plan has not begun",
     DEMAND_HOTSPOT: "high citizen demand but no official statistic or spending data to compare against; the recommendation is to verify on the ground",
     MONITOR: "demand close to the norm; the recommendation is to monitor",
 }

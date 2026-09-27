@@ -48,7 +48,13 @@ export async function postForm<T>(path: string, form: FormData): Promise<T> {
 
 // ── Shared response shapes ──────────────────────────────────────────────────
 
-export type Verdict = 'UNSERVED_GAP' | 'DELIVERY_GAP' | 'STALLED_ALLOCATION' | 'DEMAND_HOTSPOT' | 'MONITOR'
+export type Verdict =
+  | 'UNSERVED_GAP'
+  | 'DELIVERY_GAP'
+  | 'STALLED_ALLOCATION'
+  | 'PLANNED_NOT_STARTED'
+  | 'DEMAND_HOTSPOT'
+  | 'MONITOR'
 
 export interface Need {
   key: string

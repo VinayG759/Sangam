@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { get, type Fact, type Verdict } from '@/lib/api'
+import { withRegion } from '@/lib/regions'
 
 export interface PriorityRow {
   id: number
@@ -46,10 +47,13 @@ export interface SourceReport {
   is_synthetic: boolean
 }
 
-export function usePriorities() {
+export function usePriorities(region: string) {
   return useQuery({
-    queryKey: ['priorities', 'all'],
-    queryFn: () => get<{ run: { id: number; completed_at: string } | null; items: PriorityRow[] }>('/api/v1/priorities?limit=500'),
+    queryKey: ['priorities', 'all', region],
+    queryFn: () =>
+      get<{ run: { id: number; completed_at: string } | null; items: PriorityRow[] }>(
+        withRegion('/api/v1/priorities?limit=500', region),
+      ),
   })
 }
 
