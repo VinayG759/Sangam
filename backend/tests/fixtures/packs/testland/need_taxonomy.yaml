@@ -1,0 +1,9 @@
+needs:
+  - key: water
+    label_en: Water supply
+    label_xx: Wasser
+    examples_en: [no water]
+  - key: road
+    label_en: Roads
+    examples_en: [potholes]
+fallback_key: other

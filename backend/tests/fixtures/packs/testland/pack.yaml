@@ -1,0 +1,38 @@
+# Tiny fictional country used only by tests.
+country_code: TL
+country_name: Testland
+currency: TLD
+currency_symbol: "T$"
+languages: [en, xx]
+admin_levels: [country, state, district, block]
+population:
+  indicator: demography.households
+  label: households
+indicators:
+  water:
+    key: water.piped_pct
+    label: Households with piped water
+    unit: percent
+    higher_is_better: true
+    served_threshold: 80
+    baseline_key: water.piped_pct_2019
+costs:
+  water:
+    per_unit: 1000
+    unit_label: connection
+    note: Test planning assumption.
+weights: {demand: 0.35, deficit: 0.30, reach: 0.15, coverage: 0.20}
+thresholds:
+  high_demand_ratio: 1.5
+  location_accept: 90
+  location_confirm: 75
+  coordinated_similarity: 0.97
+  daily_reports_per_reporter: 3
+  emerging_window_days: 14
+privacy:
+  min_distinct_reporters: 3
+  media_retention_days: 90
+places:
+  min_match_level: 2
+  generic_words: [county, parish]
+  ask: Which village, town or county is this about?

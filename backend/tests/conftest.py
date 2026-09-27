@@ -1,113 +1,141 @@
 """
-Shared pytest fixtures and configuration for Sangam backend tests.
+Tests run against a real Postgres database (never SQLite, never a mock),
+migrated with Alembic exactly as production is. Only Gemini is faked.
 
-Uses a temporary YAML pack file and mocked Gemini service to
-ensure tests run without external dependencies.
+Database: TEST_DATABASE_URL, or the configured DATABASE_URL with the
+database name replaced by sangam_test. It is wiped between tests.
 """
 
+import hashlib
 import os
-import sys
-import pytest
-import tempfile
-import shutil
-import yaml
+from pathlib import Path
 
-# Ensure the backend directory is on the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+HERE = Path(__file__).parent
+
+
+def _test_database_url() -> str:
+    if os.environ.get("TEST_DATABASE_URL"):
+        return os.environ["TEST_DATABASE_URL"]
+    from app.core.config import Settings
+
+    base = Settings().DATABASE_URL.rsplit("/", 1)[0]
+    return f"{base}/sangam_test"
+
+
+# Must happen before anything imports app settings.
+os.environ.update({
+    "DATABASE_URL": _test_database_url(),
+    "ACTIVE_COUNTRY_PACK": "testland",
+    "PACKS_DIR": str(HERE / "fixtures" / "packs"),
+    "ADMIN_TOKEN": "test-admin-token",
+    "TELEGRAM_WEBHOOK_SECRET": "test-telegram-secret",
+    "TELEGRAM_BOT_TOKEN": "test-bot-token",
+    "WHATSAPP_APP_SECRET": "test-app-secret",
+    "WHATSAPP_VERIFY_TOKEN": "test-verify-token",
+    "REPORTER_HASH_PEPPER": "test-pepper",
+    "ALLOWED_ORIGINS": "http://localhost:5173",
+    "GEMINI_API_KEY": "",
+})
+
+import pytest  # noqa: E402
+from alembic import command  # noqa: E402
+from alembic.config import Config  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+
+from app.core.ai import AIUnavailable, Summary, Understanding  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
+from app.core.db import get_engine, new_session  # noqa: E402
+from app.core.pack import get_pack  # noqa: E402
+
+TABLES = ["priorities", "clusters", "analysis_runs", "conversations", "report_media", "reports",
+          "projects", "indicators", "regions"]
+
+
+class FakeAI:
+    """Deterministic stand-in for Gemini. Tests set .down, .places, .sector or .summary_text."""
+
+    def __init__(self):
+        self.down = False
+        self.sector = "water"
+        self.places: list[str] = []
+        self.language = "en"
+        self.actionable = True
+        self.summary_text = "Summary."
+        self.summary_calls = 0
+
+    def understand(self, pack, text, media, mime_type):
+        if self.down:
+            raise AIUnavailable("fake outage")
+        return Understanding(language=self.language, transcript=text or "[voice note]",
+                             text_en=(text or "voice note") + " (en)", sector=self.sector, urgency=3,
+                             place_names=list(self.places), is_actionable=self.actionable)
+
+    def embed(self, text):
+        if self.down:
+            raise AIUnavailable("fake outage")
+        digest = hashlib.sha256(text.encode()).digest()
+        return [((digest[i % 32] + i) % 17 + 1) / 17 for i in range(768)]
+
+    def write_summary(self, facts, context):
+        self.summary_calls += 1
+        if self.down:
+            raise AIUnavailable("fake outage")
+        return Summary(summary=self.summary_text, cited_fact_ids=[])
+
+
+@pytest.fixture(scope="session", autouse=True)
+def migrated_database():
+    get_settings.cache_clear()
+    get_pack.cache_clear()
+    config = Config(str(HERE.parent / "alembic.ini"))
+    config.set_main_option("script_location", str(HERE.parent / "migrations"))
+    command.upgrade(config, "head")
+    yield config
+
+
+@pytest.fixture(autouse=True)
+def clean_database():
+    yield
+    with get_engine().begin() as conn:
+        conn.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))
 
 
 @pytest.fixture
-def sample_pack_dir(tmp_path):
-    """
-    Create a temporary pack directory with a valid pack.yaml.
-    Returns the path to the pack directory.
-    """
-    pack_name = "test_pack"
-    pack_dir = tmp_path / pack_name
-    pack_dir.mkdir()
-
-    pack_data = {
-        "country_code": "TST",
-        "region_name": "TestRegion",
-        "languages": [
-            {"code": "en", "name": "English", "is_default": True},
-            {"code": "kn", "name": "Kannada", "is_default": False},
-        ],
-        "sectors": [
-            {"key": "water", "name": "Water Supply"},
-            {"key": "roads", "name": "Road Repairs"},
-            {"key": "sanitation", "name": "Waste Management"},
-        ],
-        "weights": {
-            "demand_density": 0.35,
-            "vulnerability_index": 0.35,
-            "expenditure_gap": 0.20,
-            "urgency": 0.10,
-        },
-    }
-
-    with open(pack_dir / "pack.yaml", "w", encoding="utf-8") as f:
-        yaml.dump(pack_data, f)
-
-    return tmp_path, pack_name
+def pack():
+    return get_pack()
 
 
 @pytest.fixture
-def sample_evidence_bundle():
-    """Return a realistic evidence bundle for testing the verifier and Gemini service."""
-    return {
-        "cluster_id": 1,
-        "title": "Cluster of 5 water reports",
-        "sector": "water",
-        "report_count": 5,
-        "average_urgency": 4.2,
-        "vulnerability_index": 0.45,
-        "allocated_budget": 2500000.0,
-        "estimated_cost": 7500000.0,
-        "budget_stalled": False,
-        "expenditure_records": [
-            {"title": "Borewell Water Treatment", "amount": 2500000.0, "status": "completed"}
-        ],
-        "citizen_quotes": [
-            "There is no drinking water in our area for the last 10 days.",
-            "Pipeline leak causing zero water pressure.",
-            "Please fix the borewell pump, it has been broken for weeks."
-        ]
-    }
+def loaded(pack):
+    """Testland's regions, indicators and project, loaded into the database."""
+    from app.features.packs.load import load_pack_into_db
+
+    with new_session() as db:
+        load_pack_into_db(db, "testland")
+    return pack
 
 
 @pytest.fixture
-def sample_priorities():
-    """Return a list of priority dicts for simulation testing."""
-    return [
-        {
-            "cluster_id": 1,
-            "title": "Water Crisis - Ward A",
-            "sector": "water",
-            "score": 85.0,
-            "reports_count": 10,
-            "vulnerability": 0.7,
-            "allocated_budget": 500000.0,
-            "estimated_cost": 3000000.0,
-        },
-        {
-            "cluster_id": 2,
-            "title": "Pothole Cluster - Ward B",
-            "sector": "roads",
-            "score": 72.0,
-            "reports_count": 25,
-            "vulnerability": 0.3,
-            "allocated_budget": 1000000.0,
-            "estimated_cost": 4000000.0,
-        },
-        {
-            "cluster_id": 3,
-            "title": "Sanitation Issues - Ward C",
-            "sector": "sanitation",
-            "score": 60.0,
-            "reports_count": 5,
-            "vulnerability": 0.5,
-            "allocated_budget": 0.0,
-            "estimated_cost": 1500000.0,
-        },
-    ]
+def db():
+    with new_session() as session:
+        yield session
+
+
+@pytest.fixture
+def ai():
+    return FakeAI()
+
+
+@pytest.fixture
+def client(ai):
+    from app.core.ai import get_ai
+    from app.main import app
+
+    app.dependency_overrides[get_ai] = lambda: ai
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+ADMIN = {"Authorization": "Bearer test-admin-token"}

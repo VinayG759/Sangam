@@ -1,0 +1,12 @@
+unit_id,country_code,level,name,name_variants,parent_unit_id,external_code,population,source_name,source_url
+TL-A,TL,1,Alpha State,,TL,1,,Test registry,https://example.org/registry
+TL-A-NORTH,TL,2,Northfield,Nordstadt|North Field,TL-A,11,,Test registry,https://example.org/registry
+TL-A-SOUTH,TL,2,Southmere,,TL-A,12,,Test registry,https://example.org/registry
+TL-A-EAST,TL,2,Eastbrook,,TL-A,13,,Test registry,https://example.org/registry
+TL-A-NORTH-RIVERTON,TL,3,Riverton,,TL-A-NORTH,111,,Test registry,https://example.org/registry
+TL-A-NORTH-HILLVIEW,TL,3,Hillview,,TL-A-NORTH,112,,Test registry,https://example.org/registry
+TL-A-SOUTH-LAKESIDE,TL,3,Lakeside,,TL-A-SOUTH,121,,Test registry,https://example.org/registry
+TL-A-WEST,TL,2,Westford,,TL-A,14,,Test registry,https://example.org/registry
+TL-A-CENTRAL,TL,2,Centerville,,TL-A,15,,Test registry,https://example.org/registry
+TL-A-UPPER,TL,2,Uppington,,TL-A,16,,Test registry,https://example.org/registry
+TL-A-LOWER,TL,2,Lowbury,,TL-A,17,,Test registry,https://example.org/registry

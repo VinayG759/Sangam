@@ -1,58 +1,78 @@
+# India country pack. Everything country-specific lives in this folder;
+# the engine code is identical for every country.
 country_code: IN
-name: India
+country_name: India
 currency: INR
 currency_symbol: "₹"
 
 # Languages accepted at intake. Gemini gets these as hints; it is not limited to them.
-languages: [hi, kn, ta, te, bn, mr, en]
+languages: [kn, hi, en, te, ta, mr, bn, ur]
 
-# Names for each depth of the admin_units tree. Index = level column in the CSV.
+# Name of each depth of the region tree. Index = level column in admin_units.csv.
 admin_levels: [country, state, district, block]
 
-# Which infrastructure indicator measures "how well served is this place already"
-# for each need type. Keys on the left come from need_taxonomy.yaml.
-indicator_map:
-  water:       water.piped_household_pct
-  road:        road.all_weather_connectivity_pct
-  electricity: power.household_electrified_pct
-  health:      health.phc_per_100k
-  education:   education.school_infra_index
-  sanitation:  sanitation.household_toilet_pct
+# Per-capita denominator. admin_units.csv has no population for Karnataka yet,
+# so demand is measured per 1,000 rural households (real JJM figure).
+population:
+  indicator: demography.rural_households
+  label: rural households
 
-# Scoring weights. These encode a political judgement, not a technical one:
-# how much to favour the worst-off place vs the greatest number of people.
-# The ministry sets these. See docs/DECISIONS.md #8.
-#   demand   - how loudly this place is asking, vs the national norm
-#   deficit  - how far behind the country's best it already is
+# Which statistic says how well served a place already is, per need.
+# Only water has real data today (Jal Jeevan Mission). Needs without a rule
+# are still ranked on demand and reach; their deficit term drops out and the
+# recommendation says so.
+indicators:
+  water:
+    key: water.piped_household_pct
+    label: Rural households with a tap connection
+    unit: percent
+    higher_is_better: true
+    # JJM reports at/above this share of households with a tap connection
+    # count as "officially served". High citizen demand in such a place is a
+    # DELIVERY_GAP: records say served, residents say otherwise.
+    served_threshold: 80
+    baseline_key: water.piped_household_pct_2019
+
+# Budget-simulator planning assumptions. NOT sanctioned amounts — always shown
+# as estimates, with the derivation.
+costs:
+  water:
+    per_unit: 22500
+    unit_label: household tap connection
+    note: >-
+      Planning assumption, not a sanctioned amount. Derived from Jal Jeevan
+      Mission's total outlay of ₹3.60 lakh crore (2019) divided by the roughly
+      16 crore rural households that lacked a tap connection at launch.
+    source_url: https://jaljeevanmission.gov.in/
+
+# Scoring weights: a political judgement, set by the government, not the engine.
+#   demand   - how loudly this place is asking, relative to the median place
+#   deficit  - how far behind the best-served place it already is
 #   reach    - how many people benefit (log-scaled)
-#   coverage - money already spent here; SUBTRACTS
+#   coverage - money already delivered here; SUBTRACTS
 weights:
-  demand:   0.35
-  deficit:  0.30
-  reach:    0.15
+  demand: 0.35
+  deficit: 0.30
+  reach: 0.15
   coverage: 0.20
 
-# The coverage penalty applies ONLY to completed projects. Money that was
-# sanctioned but never delivered must not push a place down the list —
-# that case routes to the audit list instead. See docs/DECISIONS.md #8b.
-coverage_applies_to_status: [completed]
+thresholds:
+  high_demand_ratio: 1.5
+  location_accept: 90
+  location_confirm: 75
+  coordinated_similarity: 0.97
+  daily_reports_per_reporter: 10
+  emerging_window_days: 14
 
 privacy:
-  # Distinct reporters required before a cluster is DISPLAYED.
-  # Smaller clusters still count toward scoring — they just aren't shown
-  # as an identifiable pin. See docs/DECISIONS.md #9.
+  # Distinct reporters required before a place×need is shown on any screen.
+  # Smaller groups still count toward the medians used in scoring.
   min_distinct_reporters: 5
   media_retention_days: 90
-  redacted_text_retention_days: null   # null = indefinite
 
-thresholds:
-  # baseline_ratio at or above this counts as "high demand" for the verdict
-  high_demand_ratio: 2.0
-  # coverage at or above this counts as "money was allocated"
-  funded_coverage: 0.5
-  # cosine similarity above this, same reporter, within 7 days = duplicate
-  duplicate_similarity: 0.95
-  # cosine above this across DIFFERENT reporters in a short window = flag
-  coordinated_similarity: 0.97
-
-speech_provider: gemini   # alternative: bhashini
+places:
+  # Citizens are matched to districts (2) and blocks (3), never to a state or the country.
+  min_match_level: 2
+  # Words that describe a kind of place in India rather than name it.
+  generic_words: [district, dist, taluk, taluka, tq, block, tehsil, mandal, gramin, nagar, panchayat, gp, ward, zilla]
+  ask: Which village, town or district is this about?

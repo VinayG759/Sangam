@@ -1,58 +1,34 @@
+"""Sangam API entry point."""
+
 import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.config import settings
-from app.limiter import limiter
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger(__name__)
+from app.core.config import get_settings
+from app.core.limiter import limiter
+from app.core.pack import get_pack
+from app.registry import enabled_routers
 
-app = FastAPI(
-    title="Sangam API",
-    description="Multilingual Digital Public Good for Evidence-Backed Infrastructure Prioritization",
-    version="1.0.0"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+settings = get_settings()
+app = FastAPI(title="Sangam API", version="2.0.0",
+              description="Open-source Digital Public Good: multilingual citizen voice joined with "
+                          "public data to recommend infrastructure priorities.")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# No cookies or credentials are used, so origins are restricted and credentials stay off.
+app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins, allow_credentials=False,
+                   allow_methods=["GET", "POST"], allow_headers=["*"])
 
-# Set up CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ── Root & Health endpoints (no prefix) ─────────────────────────────────────
-
-@app.get("/", tags=["Root"])
-async def root():
-    return {
-        "message": "Welcome to the Sangam DPG API. Visit /docs for the interactive API specification."
-    }
-
-@app.get("/health", tags=["Root"])
-async def health_check():
-    return {
-        "status": "healthy",
-        "app": "Sangam Backend Engine",
-        "active_pack": settings.ACTIVE_COUNTRY_PACK
-    }
-
-# ── Register all API route groups from centralized registry ─────────────────
-
-from app.routes import all_routers
-
-for router in all_routers:
+for router in enabled_routers():
     app.include_router(router)
 
-logger.info(f"Registered {len(all_routers)} API route groups")
+
+@app.get("/health", tags=["health"])
+def health():
+    return {"status": "ok", "pack": get_pack().name}
