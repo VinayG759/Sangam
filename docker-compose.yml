@@ -1,74 +1,35 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Sangam — Docker Compose (Local Development)
-# ─────────────────────────────────────────────────────────────────────────────
-# Usage:
-#   cp .env.example .env          # fill in GEMINI_API_KEY
-#   docker compose up --build     # start everything
-#   docker compose up --build -d  # start in background
-#
-# First run with demo data:
-#   SEED_DB=true docker compose up --build
-#
-# Access:
-#   API:     http://localhost:8000
-#   Swagger: http://localhost:8000/docs
-#   DB:      localhost:5432 (user: postgres, password: postgres, db: sangam)
-# ─────────────────────────────────────────────────────────────────────────────
+# Run the whole backend locally with one command:
+#   docker compose up --build
+# API: http://localhost:8000/docs   Frontend: cd frontend && npm run dev
 
 services:
-
-  # ── PostgreSQL with PostGIS + pgvector ──────────────────────────────────
   db:
-    image: supabase/postgres:15.6.0
-    container_name: sangam-db
-    ports:
-      - "5432:5432"
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: sangam
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      JWT_SECRET: super-secret-jwt-token-for-local-dev
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    ports: ["5433:5432"]  # 5433 on your machine, so it never clashes with a local Postgres
+    volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d sangam"]
       interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
+      retries: 10
 
-  # ── FastAPI Backend ────────────────────────────────────────────────────
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: sangam-backend
-    ports:
-      - "8000:8000"
+    build: ./backend
+    ports: ["${API_PORT:-8000}:8000"]
     environment:
-      - ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sangam
-      - ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/sangam
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=gemini-3.5-flash-lite
-      - GEMINI_EMBEDDING_MODEL=gemini-embedding-001
-      - ACTIVE_COUNTRY_PACK=india_karnataka
-      - PACKS_DIR=/workspace/packs
-      - SEED_DB=${SEED_DB:-false}
-    volumes:
-      # Mount packs (now inside backend/) so local edits don't need a rebuild
-      - ./backend/packs:/workspace/packs:ro
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/sangam
+      ACTIVE_COUNTRY_PACK: india
+      ALLOWED_ORIGINS: http://localhost:5173
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-local-admin-token}
+      REPORTER_HASH_PEPPER: ${REPORTER_HASH_PEPPER:-local-development-pepper}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SEED_DEMO: ${SEED_DEMO:-true}
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    restart: unless-stopped
 
 volumes:
   pgdata:

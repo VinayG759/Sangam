@@ -1,158 +1,80 @@
-# Sangam — Deployment Guide
+# Deploying Sangam
 
-## Quick Start (Local Development)
+Three free-tier services: **Supabase** (Postgres + pgvector), **Render** (API, Docker), **Vercel**
+(dashboard). Each step below is done in that service's web dashboard.
 
-### Prerequisites
-- Python 3.11+
-- Docker & Docker Compose (for database)
-- [Gemini API key](https://aistudio.google.com/apikey) (free tier is sufficient)
+## 1. Database — Supabase
 
-### Option A: Docker Compose (Recommended)
+Use a Postgres database with the `vector` extension available (Supabase has it). The first deploy's
+migration creates every table and enables the extension.
 
-Starts both the PostgreSQL database and the backend API:
+Copy the **Session pooler** connection string (Project → Connect). It becomes `DATABASE_URL`.
+
+> Sangam v2 uses a new schema. Point it at an **empty** database — a new Supabase project, or one whose
+> old tables you no longer need. Do not point it at a database holding data you want to keep.
+
+## 2. API — Render
+
+Web service, **Docker** runtime, root directory `backend`, health check path `/health`.
+
+Environment variables (see `backend/.env.example` for what each one does):
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase connection string |
+| `ACTIVE_COUNTRY_PACK` | `india` |
+| `ALLOWED_ORIGINS` | your Vercel URL, e.g. `https://sangam.vercel.app` |
+| `ADMIN_TOKEN` | a long random value (`python -c "import secrets; print(secrets.token_urlsafe(32))"`) |
+| `REPORTER_HASH_PEPPER` | a long random value — set once, never change |
+| `GEMINI_API_KEY` | AI Studio key |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | bot token; a secret you choose |
+| `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET` | from the Meta app |
+| `SEED_DEMO` | `true` for the first deploy only (loads synthetic demo reports), then `false` |
+
+On every start the container runs migrations, loads the country pack, and starts the API.
+
+## 3. Dashboard — Vercel
+
+Project root `frontend`, framework Vite. Environment variable `VITE_API_URL` = the Render URL.
+`frontend/vercel.json` makes page addresses like `/priorities/12` work on refresh.
+
+## 4. Connect the channels
+
+**Telegram** — register the webhook with the secret (Telegram then includes it on every update):
+
+```
+https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<RENDER_URL>/api/v1/webhooks/telegram&secret_token=<TELEGRAM_WEBHOOK_SECRET>
+```
+
+**WhatsApp** — in the Meta app, set the webhook URL to `<RENDER_URL>/api/v1/webhooks/whatsapp` with your
+`WHATSAPP_VERIFY_TOKEN`, and subscribe to `messages`.
+
+## 5. First analysis run
 
 ```bash
-# 1. Clone and enter the repo
-git clone https://github.com/your-org/sangam.git
-cd sangam
-
-# 2. Create environment file
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
-
-# 3. Start everything (first run with demo data)
-SEED_DB=true docker compose up --build
-
-# 4. Access the API
-#    API:     http://localhost:8000
-#    Swagger: http://localhost:8000/docs
-#    Health:  http://localhost:8000/health
+curl -X POST -H "Authorization: Bearer <ADMIN_TOKEN>" <RENDER_URL>/api/v1/admin/runs
+curl -H "Authorization: Bearer <ADMIN_TOKEN>" <RENDER_URL>/api/v1/admin/runs     # wait for "complete"
 ```
 
-Subsequent runs (data persists in the `pgdata` volume):
-```bash
-docker compose up --build
-```
+The run writes AI summaries for the top 15 priorities, pausing between calls to stay inside Gemini's
+free-tier rate limit, so it takes about two minutes.
 
-To reset the database:
-```bash
-docker compose down -v   # removes the pgdata volume
-SEED_DB=true docker compose up --build
-```
-
-### Option B: Local Python + Docker DB
-
-Use Docker only for the database, run the backend natively:
+## 6. Verify
 
 ```bash
-# 1. Start only the database
-docker compose up db -d
-
-# 2. Set up the backend
-cd backend
-cp .env.example .env
-# Edit .env — DATABASE_URL should point to localhost:5432
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Initialize the database
-python -m app.utils.db_init
-
-# 5. (Optional) Seed demo data
-python -m app.utils.db_seed
-
-# 6. Start the API server
-uvicorn app.main:app --reload --port 8000
+cd backend && python -m scripts.smoke_test <RENDER_URL>
 ```
 
----
+Then send one real message on Telegram and one on WhatsApp and check they appear under
+`/track/<tracking id>`.
 
-## Running Tests
+## Keep it awake
 
-```bash
-cd backend
-python -m pytest tests/ -v --tb=short
-```
+`.github/workflows/keepalive.yml` pings the API every 12 hours (Render sleeps after 15 minutes idle;
+Supabase pauses after 7 days). Add repository secrets `SANGAM_API_URL` and, to also re-run the analysis,
+`SANGAM_ADMIN_TOKEN`.
 
-Tests mock the database, so no PostgreSQL is needed.
+## Rolling back
 
----
-
-## Production Deployment
-
-### Backend → Render.com
-
-1. Create a **Web Service** on [Render](https://render.com/)
-2. Connect to the GitHub repo
-3. Set:
-   - **Root directory**: `backend`
-   - **Build command**: `pip install -r requirements.txt`
-   - **Start command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Add environment variables:
-   | Variable | Value |
-   |----------|-------|
-   | `DATABASE_URL` | Your Supabase connection string |
-   | `GEMINI_API_KEY` | Your Gemini API key |
-   | `ACTIVE_COUNTRY_PACK` | `india_karnataka` |
-   | `PACKS_DIR` | `packs` |
-   | `ENV` | `production` |
-
-### Database → Supabase
-
-1. Create a project on [Supabase](https://supabase.com/)
-2. The image ships with PostGIS and pgvector pre-installed
-3. Copy the **Connection string** (URI format) → set as `DATABASE_URL`
-4. Run `python -m app.utils.db_init` once to create tables
-5. Run `python -m app.utils.db_seed` to load demo data
-
-### Frontend → Vercel
-
-1. Connect the repo to [Vercel](https://vercel.com/)
-2. Set **Root directory**: `frontend`
-3. Set the backend API URL as an environment variable
-
-### Keepalive
-
-After deploying, set the `SANGAM_API_URL` secret in GitHub Actions:
-- Go to **Settings → Secrets and variables → Actions**
-- Add `SANGAM_API_URL` = `https://your-backend.onrender.com`
-
-The `keepalive.yml` workflow pings the API twice daily to prevent:
-- Supabase free-tier project pause (7 days idle)
-- Render free-tier spindown (15 minutes idle)
-
----
-
-## Environment Variables Reference
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | `postgresql://postgres:postgres@localhost:5432/sangam` | PostgreSQL connection string |
-| `ASYNC_DATABASE_URL` | No | Auto-derived from `DATABASE_URL` | Async driver URL (asyncpg) |
-| `GEMINI_API_KEY` | Yes* | `None` | Google AI Studio API key |
-| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Text generation model |
-| `GEMINI_EMBEDDING_MODEL` | No | `text-embedding-004` | Embedding model (768d) |
-| `ACTIVE_COUNTRY_PACK` | No | `india_karnataka` | Active pack name |
-| `PACKS_DIR` | No | `packs` | Path to pack configs directory |
-| `ENV` | No | `development` | `development` or `production` |
-| `SEED_DB` | No | `false` | Set `true` for Docker auto-seed |
-
-\* The app starts without `GEMINI_API_KEY` but AI features return fallback values.
-
----
-
-## Architecture
-
-```
-┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Frontend   │────▶│  Backend (API)   │────▶│   PostgreSQL     │
-│  React/Vite  │     │  FastAPI/Python  │     │  PostGIS+pgvector│
-│   Vercel     │     │    Render        │     │    Supabase      │
-└──────────────┘     └───────┬──────────┘     └──────────────────┘
-                             │
-                     ┌───────▼──────────┐
-                     │  Gemini API      │
-                     │  (AI Studio)     │
-                     └──────────────────┘
-```
+Render → the service → Deploys → redeploy the previous one. Migrations only ever add, so the previous
+version still works against the newer schema.

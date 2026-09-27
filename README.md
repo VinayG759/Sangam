@@ -1,57 +1,102 @@
 # Sangam
 
-Sangam is a multilingual, evidence-backed infrastructure prioritization platform. It bridges the gap between citizen needs and government expenditure by using AI to analyze citizen reports, identify infrastructure gaps, and simulate budget allocations.
+**Citizen voice, joined with public data, to show where infrastructure money is missing — or not reaching people.**
 
-## Key Features
-- **Multilingual Support**: Ingest citizen reports in multiple local languages and translate them to English using AI.
-- **Evidence-Backed Prioritization**: Cross-references citizen reports with historical government expenditure data to prioritize unserved gaps or stalled allocations.
-- **Interactive Dashboard**: A modern React/Vite dashboard providing real-time intelligence with metric cards, sector breakdowns, and an interactive cluster map.
-- **Budget Simulator**: Model the impact of various allocation strategies (Equity First, Max Reach, Highest Score) on infrastructure gaps given a specific budget.
+Sangam is an open-source Digital Public Good. Citizens report local problems (water, roads, electricity,
+health, schools, sanitation) by voice, photo or text, in their own language, over WhatsApp, Telegram or
+the web. Sangam groups those reports by place and need, then puts them **side by side with official
+statistics and public spending** — the join that complaint systems never make.
 
-## Architecture
-- **Backend**: FastAPI (Python 3.11)
-- **Database**: PostgreSQL with PostGIS (for spatial clustering) and pgvector (for semantic search)
-- **Frontend**: React + Vite + Recharts + Leaflet
-- **AI**: Google Gemini API (for semantic embeddings and narrative brief generation)
+| Verdict | What the join shows | Recommended action |
+|---|---|---|
+| **Unserved gap** | Many residents report the problem; official data says the place is not served | Fund |
+| **Delivery gap** | Official data says the place *is* served; many residents say otherwise | Audit |
+| **Stalled allocation** | Money is committed here; residents still report the problem | Audit |
+| **Demand hotspot** | Many residents report the problem; no official data loaded yet to compare | Verify |
+| **Monitor** | Demand close to the typical place | Monitor |
 
-## Quick Start (Local Development)
+> *Grievance systems route complaints. Sangam audits priorities.*
 
-### Prerequisites
-- Docker & Docker Compose
-- [Google Gemini API Key](https://aistudio.google.com/apikey)
+## Why you can trust the ranking
 
-### Start the Application
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-org/sangam.git
-   cd sangam
-   ```
-2. Create and configure your environment variables:
-   ```bash
-   cp .env.example .env
-   # Add your GEMINI_API_KEY to the .env file
-   ```
-3. Start the services with demo data seeded:
-   ```bash
-   SEED_DB=true docker compose up --build
-   ```
-4. Access the applications:
-   - **Frontend Dashboard**: [http://localhost:5173](http://localhost:5173) (Run `npm run dev` in the `frontend` directory)
-   - **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **The AI never decides the order.** Ranking is plain arithmetic with weights the government sets in
+  the country pack. Every score shows its working.
+- **Every AI-written number is checked by code.** Gemini writes a short explanation from a closed list of
+  sourced facts; if it writes any number that is not in those facts, the explanation is rejected.
+- **Every figure links to its source.**
+- **Reporters are protected.** Phone numbers and chat IDs are stored only as a keyed hash; personal
+  details are removed before storage; groups of fewer than 5 people are never shown.
+- **Degrade, never fail.** If Gemini is unavailable, citizens still get a tracking ID and their report is
+  processed later.
 
-For more deployment options (local native, Render, Vercel, Supabase), see our detailed [Deployment Guide](DEPLOY.md).
+## Data honesty
 
-## Project Structure
-- `backend/`: FastAPI application, core services (clustering, simulation, scoring, verifier), and database models.
-- `frontend/`: React dashboard application.
-- `packs/`: Configuration packs for specific countries/regions defining sectors, languages, and prioritization weights.
+The citizen messages in the live demo are **synthetic**, generated to mirror plausible patterns and
+marked as such everywhere they appear. Everything else — the places, the number of rural households and
+the share with a tap connection — is **real government data** (Local Government Directory and Jal Jeevan
+Mission, Karnataka), and every number links to its source. Sangam does not invent spending: where no
+spending data is loaded, it says so.
 
-## Testing
-Run backend unit and integration tests (uses SQLite for tests):
+## Built for any country (BRICS)
+
+A country is a folder under [`backend/packs/`](backend/packs): a `pack.yaml` (languages, needs, weights,
+thresholds, which statistic measures which need) and three CSVs (places, statistics, sanctioned
+projects). The engine code contains no country-specific words — a test enforces it. India (Karnataka) is
+live on real data; `packs/brazil/` is the next pack. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Run it locally
+
+**Requirements:** Python 3.11, Node 20+, and Postgres with the `pgvector` extension (or Docker).
+
 ```bash
+# Backend
 cd backend
-python -m pytest tests/ -v
+python -m venv .venv && .venv/Scripts/activate      # Windows; on macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env                                # set DATABASE_URL; GEMINI_API_KEY is optional
+alembic upgrade head                                # create the schema
+python -m app.features.packs load india             # load real Karnataka data
+python -m scripts.seed_demo                         # optional: ~4,700 synthetic demo reports
+uvicorn app.main:app --reload                       # http://localhost:8000/docs
+
+# Start an analysis run (use the ADMIN_TOKEN from .env)
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/api/v1/admin/runs
+
+# Frontend
+cd frontend
+npm install
+npm run dev                                         # http://localhost:5173
 ```
 
-## License
-MIT License
+Or with Docker: `docker compose up --build` (starts Postgres + API with demo data).
+
+## Tests
+
+```bash
+cd backend && python -m pytest       # 82 tests against a real Postgres database (sangam_test)
+cd frontend && npm test              # unit tests
+python -m scripts.smoke_test <API>   # 10-second check of a live deployment
+```
+
+## Project layout
+
+```
+backend/app/core/        shared plumbing: settings, database, country pack, Gemini, security
+backend/app/features/    one folder per feature; features never import each other
+backend/app/models.py    the tables — the contracts between features
+backend/migrations/      Alembic schema migrations
+backend/packs/           country packs (data, not code)
+frontend/src/routes.tsx  every page and its address
+frontend/src/features/   one folder per page
+docs/                    the implementation plan (technical and plain-language)
+```
+
+## Documentation
+
+- [Implementation plan](docs/implementation-plan.md) · [plain-language version](docs/implementation-plan-simple.md)
+- [Deployment guide](DEPLOY.md)
+- [Adding a country](CONTRIBUTING.md)
+
+## Licence
+
+[Apache-2.0](LICENSE)

@@ -151,7 +151,10 @@ def _run(db: Session, ai: AIClient, pack: Pack, run: AnalysisRun, summaries: int
     for priority, s, facts in written:
         if explained >= summaries or not priority.displayable:
             continue
-        text = _explain(ai, pack, regions[s.input.region_id], s, facts)
+        try:
+            text = _explain(ai, pack, regions[s.input.region_id], s, facts)
+        except AIUnavailable:
+            break  # Gemini is down: keep the templates, don't wait on further calls
         explained += 1
         if text:
             priority.summary, priority.summary_source = text, "model"
@@ -264,14 +267,12 @@ VERDICT_CONTEXT = {
 
 
 def _explain(ai: AIClient, pack: Pack, region: Region, s: Scored, facts: list[dict]) -> str | None:
-    """Model-written summary, accepted only if every number in it is in the evidence. One retry."""
+    """Model-written summary, accepted only if every number in it is in the evidence. One retry.
+    Raises AIUnavailable if Gemini cannot be reached, so the caller stops trying."""
     context = (f"Place: {region.name}. Need: {pack.need(s.input.sector).label_en}. "
                f"Verdict: {VERDICT_CONTEXT[s.verdict]}.")
     for _ in range(2):
-        try:
-            result = ai.write_summary(facts, context)
-        except AIUnavailable:
-            return None
+        result = ai.write_summary(facts, context)
         bad = unsupported_numbers(result.summary, facts)
         if not bad and result.summary.strip():
             return result.summary.strip()

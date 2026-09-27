@@ -84,6 +84,7 @@ def test_gemini_outage_still_completes_with_templates(db, ai, loaded):
     run = run_analysis(db, ai, loaded, pause_seconds=0)
     assert run.status == "complete"
     assert {p.summary_source for p in priorities(db, run).values()} == {"template"}
+    assert ai.summary_calls == 1  # stops at the first failure instead of waiting on every priority
 
 
 def test_a_failed_run_does_not_replace_the_last_complete_one(db, ai, loaded, monkeypatch):

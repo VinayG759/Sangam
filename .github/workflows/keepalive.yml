@@ -1,40 +1,37 @@
-# Supabase pauses a free-tier project after 7 consecutive days with no database
-# request. Submission is 23 Aug; Demo Day is 4 Sep. That is a 12-day gap in
-# which nobody would naturally touch the database -- so without this the
-# deployed link would be dead exactly when the judges open it.
+# Keeps the live demo awake and fresh.
 #
-# Render's free tier also spins a web service down after 15 minutes idle and
-# takes ~1 minute to wake. Pinging the API covers both problems at once.
+# Render's free tier sleeps after 15 idle minutes and Supabase pauses a free
+# project after 7 days without queries, so a scheduled ping keeps both awake.
+# If the SANGAM_ADMIN_TOKEN secret is set, each run also finishes any
+# reports that arrived while Gemini was unavailable and re-runs the analysis.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   SANGAM_API_URL      e.g. https://sangam-api.onrender.com
+#   SANGAM_ADMIN_TOKEN  same value as ADMIN_TOKEN on Render (optional)
 
 name: keepalive
 
 on:
   schedule:
-    - cron: "0 */12 * * *"   # twice a day, well inside both timeouts
-  workflow_dispatch:          # and runnable by hand before a demo
+    - cron: "0 */12 * * *"  # every 12 hours
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    env:
+      API_URL: ${{ secrets.SANGAM_API_URL }}
+      ADMIN_TOKEN: ${{ secrets.SANGAM_ADMIN_TOKEN }}
     steps:
       - name: Wake the API and touch the database
-        env:
-          API_URL: ${{ secrets.SANGAM_API_URL }}
         run: |
-          if [ -z "$API_URL" ]; then
-            echo "SANGAM_API_URL secret not set - skipping."
-            echo "Set it in Settings > Secrets and variables > Actions."
-            exit 0
-          fi
-          # /health checks liveness, /api/v1/overview reads the database
-          echo "Pinging health..."
-          code=$(curl -s -o /tmp/health -w '%{http_code}' --max-time 90 "$API_URL/health")
-          echo "Health: HTTP $code"
-          head -c 400 /tmp/health
-          echo ""
-
-          echo "Pinging overview (touches database)..."
-          code=$(curl -s -o /tmp/out -w '%{http_code}' --max-time 90 "$API_URL/api/v1/overview")
-          echo "Overview: HTTP $code"
-          head -c 400 /tmp/out
-          test "$code" = "200"
+          if [ -z "$API_URL" ]; then echo "SANGAM_API_URL not set - skipping."; exit 0; fi
+          curl -fsS --max-time 120 "$API_URL/health"
+          echo
+          curl -fsS --max-time 120 -o /dev/null -w "overview: HTTP %{http_code}\n" "$API_URL/api/v1/overview"
+      - name: Reprocess waiting reports and re-run the analysis
+        if: env.ADMIN_TOKEN != '' && env.API_URL != ''
+        run: |
+          curl -fsS --max-time 300 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API_URL/api/v1/admin/reprocess"
+          echo
+          curl -fsS --max-time 60 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API_URL/api/v1/admin/runs"
