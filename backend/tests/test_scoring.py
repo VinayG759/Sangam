@@ -2,6 +2,7 @@ import pytest
 
 from app.features.analysis.scoring import (
     DELIVERY_GAP,
+    DEMAND_HOTSPOT,
     MONITOR,
     STALLED_ALLOCATION,
     UNSERVED_GAP,
@@ -23,7 +24,7 @@ WEIGHTS = {"demand": 0.35, "deficit": 0.30, "reach": 0.15, "coverage": 0.20}
     (True, [], 95, DELIVERY_GAP),
     (True, [ProjectFact("completed", 100)], 20, DELIVERY_GAP),
     (True, [], 20, UNSERVED_GAP),
-    (True, [], None, UNSERVED_GAP),
+    (True, [], None, DEMAND_HOTSPOT),
     (True, [ProjectFact("planned", 100)], 20, UNSERVED_GAP),
 ])
 def test_verdict_table(high, projects, value, expected):

@@ -110,3 +110,12 @@ def test_accelerating_demand_is_flagged_emerging(db, ai, loaded):
     clusters = {c.region_id: c for c in db.scalars(select(Cluster).where(Cluster.run_id == run.id))}
     assert clusters["TL-A-SOUTH"].is_emerging is True
     assert clusters["TL-A-NORTH"].is_emerging is False
+
+
+def test_places_to_monitor_rank_below_places_needing_action(db, ai, loaded):
+    seed(db)
+    run = run_analysis(db, ai, loaded, pause_seconds=0)
+    shown = sorted((p for p in priorities(db, run).values() if p.displayable), key=lambda p: p.rank)
+    verdicts = [p.verdict for p in shown]
+    assert "MONITOR" in verdicts
+    assert verdicts.index("MONITOR") > max(i for i, v in enumerate(verdicts) if v != "MONITOR")

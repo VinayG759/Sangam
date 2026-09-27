@@ -19,6 +19,7 @@ from app.core.ai import AIClient, AIUnavailable
 from app.core.pack import Pack
 from app.features.analysis.scoring import (
     DELIVERY_GAP,
+    DEMAND_HOTSPOT,
     MONITOR,
     STALLED_ALLOCATION,
     UNSERVED_GAP,
@@ -112,7 +113,8 @@ def _run(db: Session, ai: AIClient, pack: Pack, run: AnalysisRun, summaries: int
     scored = score_clusters(inputs, {"demand": w.demand, "deficit": w.deficit, "reach": w.reach,
                                      "coverage": w.coverage}, pack.thresholds.high_demand_ratio)
     floor = pack.privacy.min_distinct_reporters
-    scored.sort(key=lambda s: (s.input.distinct_reporters >= floor, s.score), reverse=True)
+    # Places needing action rank above places to merely monitor; score orders within each.
+    scored.sort(key=lambda s: (s.input.distinct_reporters >= floor, s.verdict != MONITOR, s.score), reverse=True)
 
     window = timedelta(days=pack.thresholds.emerging_window_days)
     rank = 0
@@ -237,7 +239,12 @@ def _template(pack: Pack, region: Region, s: Scored, facts: list[dict]) -> str:
                 "Recommended action: audit why the allocation has not reached people.")
     if s.verdict == UNSERVED_GAP:
         return (f"{reporters} residents of {region.name} report {need} problems, {ratio} times the median place."
-                f"{official_text} No public project is recorded here. Recommended action: consider for allocation.")
+                f"{official_text} That is below the level counted as served. "
+                "Recommended action: consider for allocation.")
+    if s.verdict == DEMAND_HOTSPOT:
+        return (f"{reporters} residents of {region.name} report {need} problems, {ratio} times the median place. "
+                "No official statistic or spending record for this need is loaded yet, so the gap cannot be "
+                "confirmed. Recommended action: verify on the ground and add the missing data.")
     return (f"{reporters} residents of {region.name} report {need} problems, close to the norm "
             f"({ratio} times the median place).{official_text} Recommended action: monitor.")
 
@@ -246,6 +253,7 @@ VERDICT_CONTEXT = {
     UNSERVED_GAP: "high citizen demand and no public project recorded; the recommendation is to consider funding",
     STALLED_ALLOCATION: "high citizen demand although money is already committed; the recommendation is a delivery audit",
     DELIVERY_GAP: "high citizen demand although official statistics say the place is served; the recommendation is a delivery audit",
+    DEMAND_HOTSPOT: "high citizen demand but no official statistic or spending data to compare against; the recommendation is to verify on the ground",
     MONITOR: "demand close to the norm; the recommendation is to monitor",
 }
 

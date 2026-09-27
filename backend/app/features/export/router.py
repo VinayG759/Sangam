@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/v1", tags=["export"])
 VERDICT_TITLES = {"UNSERVED_GAP": "Unserved gap — consider for allocation",
                   "STALLED_ALLOCATION": "Stalled allocation — audit delivery",
                   "DELIVERY_GAP": "Delivery gap — records say served, residents disagree",
+                  "DEMAND_HOTSPOT": "Demand hotspot — verify; no official data to compare yet",
                   "MONITOR": "Monitor"}
 
 
