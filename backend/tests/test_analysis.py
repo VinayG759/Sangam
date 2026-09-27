@@ -112,10 +112,11 @@ def test_accelerating_demand_is_flagged_emerging(db, ai, loaded):
     assert clusters["TL-A-NORTH"].is_emerging is False
 
 
-def test_places_to_monitor_rank_below_places_needing_action(db, ai, loaded):
+def test_evidence_backed_actions_rank_first_then_hotspots_then_monitor(db, ai, loaded):
     seed(db)
+    add_reports(db, "TL-A-SOUTH", "road", 20, prefix="loud")  # no statistic for roads → hotspot
     run = run_analysis(db, ai, loaded, pause_seconds=0)
     shown = sorted((p for p in priorities(db, run).values() if p.displayable), key=lambda p: p.rank)
-    verdicts = [p.verdict for p in shown]
-    assert "MONITOR" in verdicts
-    assert verdicts.index("MONITOR") > max(i for i, v in enumerate(verdicts) if v != "MONITOR")
+    tiers = [{"DEMAND_HOTSPOT": 1, "MONITOR": 0}.get(p.verdict, 2) for p in shown]
+    assert {0, 1, 2} <= set(tiers)
+    assert tiers == sorted(tiers, reverse=True)

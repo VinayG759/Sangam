@@ -113,8 +113,10 @@ def _run(db: Session, ai: AIClient, pack: Pack, run: AnalysisRun, summaries: int
     scored = score_clusters(inputs, {"demand": w.demand, "deficit": w.deficit, "reach": w.reach,
                                      "coverage": w.coverage}, pack.thresholds.high_demand_ratio)
     floor = pack.privacy.min_distinct_reporters
-    # Places needing action rank above places to merely monitor; score orders within each.
-    scored.sort(key=lambda s: (s.input.distinct_reporters >= floor, s.verdict != MONITOR, s.score), reverse=True)
+    # Evidence-backed actions (fund / audit) first, then hotspots to verify, then places to monitor;
+    # the score orders places within each tier.
+    tier = {DEMAND_HOTSPOT: 1, MONITOR: 0}
+    scored.sort(key=lambda s: (s.input.distinct_reporters >= floor, tier.get(s.verdict, 2), s.score), reverse=True)
 
     window = timedelta(days=pack.thresholds.emerging_window_days)
     rank = 0
@@ -199,7 +201,8 @@ def _evidence(pack: Pack, region: Region, s: Scored, indicators, projects, popul
         for fact_id, key in (("F5", rule.key), ("F6", rule.baseline_key)):
             ind = indicators.get((region.id, key)) if key else None
             if ind:
-                facts.append({"id": fact_id, "label": rule.label or key, "value": _fmt(ind.value), "unit": ind.unit,
+                label = f"{rule.label or key} ({ind.period})"
+                facts.append({"id": fact_id, "label": label, "value": _fmt(ind.value), "unit": ind.unit,
                               "period": ind.period, "source_name": ind.source_name, "source_url": ind.source_url})
     for i, project in enumerate(projects[(region.id, s.input.sector)][:3], start=1):
         facts.append({"id": f"P{i}", "label": f"{project.title} ({project.status.replace('_', ' ')})",
@@ -227,8 +230,10 @@ def _template(pack: Pack, region: Region, s: Scored, facts: list[dict]) -> str:
     need = pack.need(s.input.sector).label_en.lower()
     reporters, ratio = s.input.distinct_reporters, _fmt(s.baseline_ratio)
     official = _fact(facts, "F5")
+    rule = pack.indicators.get(s.input.sector)
     official_text = (f" Official data ({official['source_name']}, {official['period']}) shows "
-                     f"{official['label'].lower()} at {official['value']}%.") if official else ""
+                     f"{(rule.label or rule.key).lower()} at {official['value']}"
+                     f"{'%' if official['unit'] == 'percent' else ' ' + (official['unit'] or '')}.") if official else ""
     if s.verdict == DELIVERY_GAP:
         return (f"{reporters} residents of {region.name} report {need} problems, {ratio} times the median place."
                 f"{official_text} Records say this place is served; residents say otherwise. "
@@ -250,7 +255,7 @@ def _template(pack: Pack, region: Region, s: Scored, facts: list[dict]) -> str:
 
 
 VERDICT_CONTEXT = {
-    UNSERVED_GAP: "high citizen demand and no public project recorded; the recommendation is to consider funding",
+    UNSERVED_GAP: "high citizen demand and the official statistic is below the level counted as served; the recommendation is to consider funding. Do not claim anything about projects or budgets that is not in the facts",
     STALLED_ALLOCATION: "high citizen demand although money is already committed; the recommendation is a delivery audit",
     DELIVERY_GAP: "high citizen demand although official statistics say the place is served; the recommendation is a delivery audit",
     DEMAND_HOTSPOT: "high citizen demand but no official statistic or spending data to compare against; the recommendation is to verify on the ground",
