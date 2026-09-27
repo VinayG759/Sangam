@@ -1,6 +1,6 @@
 # Sangam — Implementation Plan
 
-**Version:** 2.1 · **Written:** 27 Sep 2026 · **Updated:** 27 Sep 2026 (deadline 30 Sep and BRICS scope confirmed) · **Owner:** Vinay G
+**Version:** 2.2 · **Written:** 27 Sep 2026 · **Updated:** 27 Sep 2026 (full rewrite done; see §0.1) · **Owner:** Vinay G
 **Replaces:** every earlier file in `docs/` (all recoverable from git history at commit `cf20571`).
 **Plain-language companion:** [implementation-plan-simple.md](implementation-plan-simple.md) — same plan, same phase numbers, simpler words.
 **Full system design (architecture, data model, algorithms):**
@@ -29,6 +29,39 @@ https://claude.ai/code/artifact/ab991d55-d4c5-4c17-86e5-53449719f3db
 ---
 
 ## 0. Confirmed scope and sequencing
+
+### 0.1 Status — 27 Sep 2026, after the rewrite
+
+On 27 Sep Vinay chose to **rewrite the codebase now** rather than patch it. The rewrite is done,
+tested and committed locally; **nothing is deployed yet**. What it delivered, mapped to this plan:
+
+| Plan item | State |
+|---|---|
+| Phase 0 code fixes: Telegram secret (K3), CORS (K4), zero-embedding root cause (K5), admin fail-closed | **Done in code** — verified by tests and a local Docker run |
+| Phase 0.7 smoke test | **Done** — `backend/scripts/smoke_test.py`, 9 checks, passes against the Docker image |
+| Phase 1.1 repo hygiene: LICENSE, README, CONTRIBUTING, `engine/` removed | **Done** |
+| Phase 1.2 demo dataset | **Done** — `scripts/seed_demo.py`, 4,704 synthetic reports placed against real JJM coverage |
+| Phase 2 foundations: Alembic, feature folders, import-linter, router, per-page data + error boundaries, frontend CI, kill switches | **Done** |
+| Phase 3 SaaS-grade UI | **Done** — checked in a real browser at desktop and phone width |
+| Phase 7.2 media retention | **Done** — each analysis run deletes raw media older than the pack's limit |
+| Tests | 82 backend (real Postgres) + 6 frontend, all passing; the Docker image builds and passes the smoke test |
+
+**Two corrections the rewrite forced — both about honesty:**
+
+1. **There is no real spending data.** `packs/india/sanctioned_projects.csv` is empty; every
+   spending line the old dashboard showed was invented by the old seed script. The rewrite never
+   invents spending. The real join is citizen demand × **Jal Jeevan Mission tap-connection
+   coverage** (real, sourced, 2019 and 2026): high demand where JJM reports ≥ 80% coverage is a
+   `DELIVERY_GAP` — records say served, residents disagree. `STALLED_ALLOCATION` stays in the
+   engine and will appear as soon as real project data is loaded (Phase 6 / data work).
+2. **A need with no official statistic cannot be called "unserved".** New verdict
+   `DEMAND_HOTSPOT` (verify on the ground). Only water has a statistic today, so roads, power,
+   health, schools and sanitation show as hotspots.
+
+**Still needed before submission — each needs Vinay:** a production database for the new schema
+(decision D-22), Render + Vercel environment variables and a deploy (DEPLOY.md), registering the
+Telegram webhook with its secret, a real-phone WhatsApp and Telegram test (K6), then Phase 1.3–1.5
+(video, deck, description).
 
 Both facts that decide this plan's order were confirmed by Vinay on **27 Sep 2026**:
 
@@ -163,19 +196,19 @@ Verified against the code on 27 Sep 2026.
 | ID | Defect | Severity | Phase |
 |----|--------|----------|-------|
 | K1 | `ADMIN_TOKEN` not set on Render → admin routes 401 for everyone | High | 0 |
-| K2 | `flagged_coordinated` column fix not yet deployed → production inserts at risk | **Critical** | 0 |
-| K3 | Telegram webhook has no secret-token check → anyone can inject fake reports | High | 0 |
-| K4 | CORS `allow_origins=["*"]` with `allow_credentials=True` in `main.py` | Medium | 0 |
-| K5 | 16 of 24 production embeddings are zero-norm → semantic clustering inert on real data | High | 0 |
+| K2 | `flagged_coordinated` column fix not yet deployed → production inserts at risk | **Critical** | Superseded — v2 needs a fresh database (D-22) |
+| K3 | Telegram webhook has no secret-token check → anyone can inject fake reports | High | ✅ fixed in rewrite |
+| K4 | CORS `allow_origins=["*"]` with `allow_credentials=True` in `main.py` | Medium | ✅ fixed in rewrite |
+| K5 | 16 of 24 production embeddings are zero-norm → semantic clustering inert on real data | High | ✅ root cause fixed (failed calls returned zeros; now NULL + retry) |
 | K6 | WhatsApp never confirmed end-to-end against a real phone | Medium | 0 |
-| K7 | No `LICENSE` file; README says MIT, decision is Apache-2.0 | High (DPG requirement) | 1 |
-| K8 | No migration framework — schema changes are ad-hoc `ALTER TABLE` in `db_init.py` | High | 2 |
-| K9 | Frontend has no router — tabs in component state; URLs never change | Medium | 2 |
-| K10 | CI does not build or lint the frontend | Medium | 2 |
-| K11 | UI reads as AI-generated (dark gradient, glows, two display fonts, emoji) | Medium | 3 |
+| K7 | No `LICENSE` file; README says MIT, decision is Apache-2.0 | High (DPG requirement) | ✅ done |
+| K8 | No migration framework — schema changes are ad-hoc `ALTER TABLE` in `db_init.py` | High | ✅ Alembic |
+| K9 | Frontend has no router — tabs in component state; URLs never change | Medium | ✅ done |
+| K10 | CI does not build or lint the frontend | Medium | ✅ done |
+| K11 | UI reads as AI-generated (dark gradient, glows, two display fonts, emoji) | Medium | ✅ redesigned |
 | K12 | Impact measurement absent | High (brief) | 4 |
 | K13 | Brazil pack is a stub (no `pack.yaml`) | High (brief says BRICS) | 1.6 framing, 6 build |
-| K14 | Leftover untracked `engine/` folder at repo root | Low | 1 |
+| K14 | Leftover untracked `engine/` folder at repo root | Low | ✅ removed |
 
 ---
 
@@ -282,13 +315,13 @@ frontend/src/
 
 | Order | Phase | Name | Goal | Est. effort (solo) | When | Status |
 |-------|-------|------|------|-------------------|------|--------|
-| 1st | 0 | Stabilise production | Live system is safe and correct | 1 day | **Before submission** | Not started |
-| 2nd | 1 | Submission package | Everything judges need, incl. honest BRICS framing | 1.5–2 days | **Before submission** | Not started |
-| 3rd | 2 | Foundations | Migrations, feature folders, router, CI, independence | 3–4 days | After submission | Not started |
+| 1st | 0 | Stabilise production | Live system is safe and correct | 1 day | **Before submission** | Code done; deploy + real-phone test pending |
+| 2nd | 1 | Submission package | Everything judges need, incl. honest BRICS framing | 1.5–2 days | **Before submission** | 1.1–1.2 done; video, deck, description pending |
+| 3rd | 2 | Foundations | Migrations, feature folders, router, CI, independence | 3–4 days | After submission | ✅ Done early (rewrite) |
 | 3rd ∥ | 6.1 | Brazil data research | Real, sourced Brazil pack for one estado | 3–5 days, data-bound | After submission, parallel to Phase 2 | Not started |
 | 4th | 6.2–6.4 | Second country live | Validate, multi-pack serving, live switch | 1–2 days | After Phase 2 | Not started |
 | 5th | 4 | Impact measurement + close the loop | Answer the "measure impact" part of the brief | 2–3 days | After Phase 6 | Not started |
-| 6th | 3 | SaaS-grade UI | Dashboard a ministry would take seriously | 3–4 days | After Phase 4 | Not started |
+| 6th | 3 | SaaS-grade UI | Dashboard a ministry would take seriously | 3–4 days | After Phase 4 | ✅ Done early (rewrite) |
 | 7th | 5 | National view + reach metrics + investment plans | "National policymakers", "Depth & Reach" | 2–3 days | After Phase 3 | Not started |
 | 8th | 7 | Security & DPG hardening | Signed briefs, retention job, DPGA application | 2 days | Before finale | Not started |
 | — | 8 | Deferred / cut | Explicitly *not* doing | — | — | — |
@@ -409,14 +442,15 @@ Unshipped polish counts for nothing; an unclear story loses Problem-Solution Fit
      documents.
    - Add `CONTRIBUTING.md` (how to add a country pack) — this is DPG evidence.
 
-1.2 **Demo dataset.** Seed a realistic volume (~4,000 synthetic requests across
-   Karnataka districts, multiple languages), labelled as synthetic. All maps,
-   populations, indicators and budget lines remain real. Verify at least one
-   `STALLED_ALLOCATION` and several `UNSERVED_GAP` verdicts exist on real JJM data.
+1.2 **Demo dataset.** ✅ `python -m scripts.seed_demo` — 4,704 synthetic reports in six
+   languages, marked `is_synthetic`. Places, households and tap coverage are real JJM/LGD
+   data. There is **no real spending data**, so the demo shows `UNSERVED_GAP`,
+   `DELIVERY_GAP`, `DEMAND_HOTSPOT` and `MONITOR` — never an invented `STALLED_ALLOCATION`.
 
 1.3 **Demo script (video, 3–5 min).**
-   1. 0:00 — Open on a ranked `STALLED_ALLOCATION` recommendation with its evidence
-      chain. ("₹X sanctioned in 20XX; N distinct residents still report no water.")
+   1. 0:00 — Open on a `DELIVERY_GAP` with its evidence chain: "Jal Jeevan Mission reports
+      95%+ of households here have a tap. N residents say the water never comes." Records say
+      served; residents disagree — the finding no complaint tracker can produce.
    2. 0:40 — Reveal where it came from: voice notes in Kannada/Hindi/English, clustered
       across languages.
    3. 1:30 — Send a real voice note live on WhatsApp/Telegram; show the tracking ID.
@@ -937,7 +971,7 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-8 | License | Apache-2.0 (patent grant) — LICENSE file to be added in Phase 1 | 16 Aug |
 | D-9 | Stalled allocations | Separate list from unserved gaps ("fund this" ≠ "send an inspector") | 16 Aug |
 | D-10 | Privacy floor | 5 distinct reporters to display; small clusters still count toward scoring | 16 Aug |
-| D-11 | Synthetic data | Volunteer it: *"The citizen messages are synthetic, generated to mirror observed complaint patterns. Everything else — maps, population, water coverage, budget lines — is real government data, and every number links to its source."* | 16 Aug |
+| D-11 | Synthetic data | Volunteer it: *"The citizen messages are synthetic, generated to mirror plausible complaint patterns. The places, the number of rural households and the share with a tap connection are real government data, and every number links to its source. We don't have district spending data yet, so Sangam doesn't invent it."* (Corrected 27 Sep: the original sentence claimed budget lines were real; they were not.) | 16 Aug, corrected 27 Sep |
 | D-12 | Retention | Redacted text indefinite; raw audio/photo 90 days | 16 Aug |
 | D-13 | Judge access | Open read-only link, no login | 16 Aug |
 | D-14 | Gemini tier | Free tier through build; paid only in final week if needed | 25 Aug |
@@ -945,6 +979,10 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-16 | Store encrypted chat IDs to notify citizens (Phase 4.3) | **Pending — Vinay's decision** | — |
 | D-17 | Official scope wording | **"Across BRICS nations"** — Brazil is the first post-submission build (Phase 6); pitch frames it honestly before then | 27 Sep |
 | D-18 | Submission deadline | **30 Sep 2026** confirmed — only Phases 0–1 before submission | 27 Sep |
+| D-19 | Rewrite now vs patch | **Full rewrite now** (Vinay's decision); production keeps the old code until the new version passes its checks and Vinay approves a deploy | 27 Sep |
+| D-20 | Spending data | **Never invented.** Verdicts join demand to real statistics; `DEMAND_HOTSPOT` where no statistic exists | 27 Sep |
+| D-21 | Ranking order | Fund/audit verdicts first, then hotspots to verify, then monitor; score orders within each tier | 27 Sep |
+| D-22 | Production database for v2 | **Pending — Vinay's decision:** new empty Supabase project (recommended) or reset the existing one | — |
 
 ---
 

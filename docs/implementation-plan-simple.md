@@ -98,6 +98,38 @@ hackathon site. The schedule assumes end of day, India time.
 
 ---
 
+## Where things stand now (27 Sep, after the rewrite)
+
+You chose to rewrite everything now instead of patching. **The rewrite is done and tested on
+your laptop. Nothing is live yet** — the website people see still runs the old code until you
+approve a deploy.
+
+**Done:**
+- The new backend: one folder per feature, a rule-checker that stops features reaching into
+  each other, migrations for every database change, and the Phase 0 security fixes (Telegram
+  door locked, CORS restricted, admin password required).
+- **The zero-embeddings mystery is solved.** When the AI failed, the old code saved a list of
+  zeros as if it were a real answer. Now it saves "nothing yet" and tries again later.
+- The new dashboard: the calm SaaS design, a real web address for every page, a source marker
+  on every number. Checked in a real browser on desktop and phone.
+- Practice data, the smoke test, a LICENSE file, and a new README, deploy guide and "add a
+  country" guide.
+- 88 automatic tests, all passing. The Docker version was tested end to end too.
+
+**Two honest corrections the rewrite forced:**
+1. **We have no real spending data.** The old dashboard's budget lines were made up by the old
+   setup script. The new Sangam never makes up money. Its real finding is stronger anyway:
+   *the government's water data says homes here have taps, and residents say no water comes*
+   — a **delivery gap**.
+2. **We can't call a place "unserved" without data.** For roads, power, health, schools and
+   sanitation we have no official statistics yet, so those show as **"demand hotspots — verify"**.
+
+**Still needed from you before submitting:** decide on the production database (a new empty
+Supabase project is my recommendation), set the settings on Render and Vercel, approve the
+deploy, and test with your own phone. Then the video, slides and description.
+
+---
+
 ## Part 3 — Did we answer the whole problem?
 
 The problem statement is really describing a **broken loop**:
@@ -287,12 +319,14 @@ slides.
    - Delete the leftover `engine/` folder (old code nothing uses).
    - Rewrite the README so a stranger understands Sangam in 30 seconds.
    - Add a short guide on "how to add a new country."
-2. **Prepare the demo data.** About 4,000 practice citizen messages. **These are made
-   up, and we say so openly.** Everything else — maps, population, water coverage,
-   budgets — is real government data.
+2. **Prepare the demo data.** ✅ Done — 4,704 practice citizen messages. **These are made
+   up, and we say so openly.** The places, the number of households and the water-tap
+   coverage are real government data. **Budgets are not** — we have no real spending data,
+   so Sangam doesn't show any. (The old plan said budgets were real. That was wrong.)
 3. **Record the video (3–5 minutes).** The order matters:
-   1. **Start with the punchline:** a "stalled allocation" — "₹X was given here, and people
-      are still complaining."
+   1. **Start with the punchline:** a "delivery gap" — "The government's own water data says
+      95% of homes here have a tap. These residents say the water never comes." Records say
+      served; people say otherwise.
    2. Then show where it came from — voice notes in several languages.
    3. Send a real voice note **live** during recording.
    4. Show the budget simulator.
@@ -587,7 +621,7 @@ Every time:
 | AI free plan hits its limit during the demo | The dashboard never uses AI, so it can't break |
 | A database change breaks the live site | Migrations (Phase 2) plus the "which database?" check |
 | Strangers post fake reports | Lock the Telegram door (Phase 0) |
-| A judge asks "is this data real?" | We say it first: messages are practice data, everything else is real and sourced |
+| A judge asks "is this data real?" | We say it first: the messages are practice data; places, households and water coverage are real and sourced; we have no spending data yet, so we show none |
 | Brazil spending data can't be found | 2-day check-in, then load real Brazil data without spending (see Phase 6) |
 | Only one person knows the system | These two plan documents, plus tests that describe how things should work |
 
