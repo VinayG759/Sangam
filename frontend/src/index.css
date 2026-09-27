@@ -1,429 +1,116 @@
-/* ─────────────────────────────────────────────────────────────────────────── */
-/* Sangam Design System                                                         */
-/* ─────────────────────────────────────────────────────────────────────────── */
+@import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@600;700;800&display=swap');
+/*
+ * Design tokens. Neutral surfaces, one accent, and colour reserved for meaning
+ * (the five verdicts). Every colour is a variable so dark mode is one block.
+ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-/* ── Tokens ─────────────────────────────────────────────────────────────── */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-unserved: var(--unserved);
+  --color-unserved-soft: var(--unserved-soft);
+  --color-delivery: var(--delivery);
+  --color-delivery-soft: var(--delivery-soft);
+  --color-stalled: var(--stalled);
+  --color-stalled-soft: var(--stalled-soft);
+  --color-hotspot: var(--hotspot);
+  --color-hotspot-soft: var(--hotspot-soft);
+  --color-monitor: var(--monitor);
+  --color-monitor-soft: var(--monitor-soft);
+}
+
 :root {
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Outfit', 'Inter', sans-serif;
+  --canvas: #fafaf9;
+  --surface: #ffffff;
+  --subtle: #f5f5f4;
+  --line: #e7e5e4;
+  --ink: #1c1917;
+  --muted: #57534e;
+  --faint: #a8a29e;
+  --accent: #0f766e;
+  --accent-soft: #e7f3f1;
 
-  /* Backgrounds */
-  --bg-base:    #060d1a;
-  --bg-surface: #0c1528;
-  --bg-card:    rgba(16, 28, 52, 0.85);
-  --bg-hover:   rgba(255, 255, 255, 0.04);
-  --bg-input:   rgba(255, 255, 255, 0.06);
-
-  /* Borders */
-  --border:       rgba(99, 140, 214, 0.12);
-  --border-focus: rgba(99, 140, 214, 0.4);
-
-  /* Text */
-  --text-primary:   #f0f6ff;
-  --text-secondary: #8ba4cc;
-  --text-muted:     #4e6a93;
-
-  /* Brand gradient */
-  --grad-brand: linear-gradient(135deg, #3b6ef5 0%, #7c3aed 100%);
-  --grad-glow:  radial-gradient(ellipse at top, rgba(59, 110, 245, 0.15), transparent 60%);
-
-  /* Accents */
-  --accent-blue:    #3b6ef5;
-  --accent-purple:  #7c3aed;
-  --accent-emerald: #10b981;
-  --accent-amber:   #f59e0b;
-
-  /* Verdict colors */
-  --verdict-unserved:    #ef4444;
-  --verdict-stalled:     #f97316;
-  --verdict-underfunded: #eab308;
-  --verdict-deliverygap: #8b5cf6;
-  --verdict-wellserved:  #10b981;
-
-  /* Sector palette */
-  --sector-water:      #38bdf8;
-  --sector-roads:      #a78bfa;
-  --sector-sanitation: #34d399;
-  --sector-health:     #fb7185;
-  --sector-education:  #fbbf24;
-  --sector-electricity:#60a5fa;
-  --sector-other:      #94a3b8;
-
-  /* Elevation */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 40px rgba(59, 110, 245, 0.15);
-
-  /* Radius */
-  --radius-sm:  6px;
-  --radius-md:  12px;
-  --radius-lg:  16px;
-  --radius-xl:  24px;
-
-  /* Transitions */
-  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --unserved: #b42318;
+  --unserved-soft: #fdecea;
+  --delivery: #b54708;
+  --delivery-soft: #fef3e6;
+  --stalled: #7a3fb0;
+  --stalled-soft: #f3ecfa;
+  --hotspot: #1d5fa8;
+  --hotspot-soft: #e8f0fa;
+  --monitor: #6b6763;
+  --monitor-soft: #f1f0ef;
+  color-scheme: light;
 }
 
-/* ── Reset ──────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #121110;
+    --surface: #1a1918;
+    --subtle: #22211f;
+    --line: #2e2c2a;
+    --ink: #eceae7;
+    --muted: #a8a29e;
+    --faint: #6f6a65;
+    --accent: #3fb8a8;
+    --accent-soft: #15302d;
+
+    --unserved: #f0786d;
+    --unserved-soft: #3a1c19;
+    --delivery: #f0a45c;
+    --delivery-soft: #36260f;
+    --stalled: #c09be6;
+    --stalled-soft: #2c2138;
+    --hotspot: #7fb0ec;
+    --hotspot-soft: #1a2638;
+    --monitor: #a8a29e;
+    --monitor-soft: #26241f;
+    color-scheme: dark;
+  }
 }
 
-html {
-  font-family: var(--font-body);
-  background-color: var(--bg-base);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+html,
+body,
+#root {
+  min-height: 100%;
 }
 
 body {
-  min-height: 100vh;
-  overflow-x: hidden;
-  background:
-    var(--grad-glow),
-    var(--bg-base);
-}
-
-#root {
-  width: 100%;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Typography ─────────────────────────────────────────────────────────── */
-h1, h2, h3 {
-  font-family: var(--font-display);
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-h4, h5, h6, p, span, label {
-  font-family: var(--font-body);
-}
-
-/* ── Layout utilities ───────────────────────────────────────────────────── */
-.container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.gap-2 { gap: 8px; }
-.gap-3 { gap: 12px; }
-.gap-4 { gap: 16px; }
-.gap-6 { gap: 24px; }
-.gap-8 { gap: 32px; }
-
-/* ── Card ───────────────────────────────────────────────────────────────── */
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-
-.card:hover {
-  border-color: var(--border-focus);
-  box-shadow: var(--shadow-glow);
-}
-
-.card-pad {
-  padding: 20px 24px;
-}
-
-/* ── Badge ──────────────────────────────────────────────────────────────── */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.badge-unserved    { background: rgba(239, 68, 68, 0.15);  color: var(--verdict-unserved);    border: 1px solid rgba(239, 68, 68, 0.3); }
-.badge-stalled     { background: rgba(249, 115, 22, 0.15); color: var(--verdict-stalled);     border: 1px solid rgba(249, 115, 22, 0.3); }
-.badge-underfunded { background: rgba(234, 179, 8, 0.15);  color: var(--verdict-underfunded); border: 1px solid rgba(234, 179, 8, 0.3); }
-.badge-deliverygap { background: rgba(139, 92, 246, 0.15);  color: var(--verdict-deliverygap); border: 1px solid rgba(139, 92, 246, 0.3); }
-.badge-wellserved  { background: rgba(16, 185, 129, 0.15); color: var(--verdict-wellserved);  border: 1px solid rgba(16, 185, 129, 0.3); }
-
-/* ── Buttons ────────────────────────────────────────────────────────────── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--font-body);
-  cursor: pointer;
-  border: none;
-  transition: all var(--transition);
-  text-decoration: none;
-}
-
-.btn-primary {
-  background: var(--grad-brand);
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(59, 110, 245, 0.35);
-}
-.btn-primary:hover { opacity: 0.9; box-shadow: 0 6px 24px rgba(59, 110, 245, 0.5); transform: translateY(-1px); }
-
-.btn-ghost {
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-focus); }
-
-/* ── Tab bar ────────────────────────────────────────────────────────────── */
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 4px;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  font-family: var(--font-body);
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  transition: all var(--transition);
-  white-space: nowrap;
-}
-
-.tab-btn:hover { color: var(--text-secondary); background: var(--bg-hover); }
-.tab-btn.active {
-  background: var(--grad-brand);
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(59, 110, 245, 0.4);
-}
-
-/* ── Input / Select ─────────────────────────────────────────────────────── */
-.input, .select {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 13px;
-  padding: 8px 12px;
-  outline: none;
-  transition: border-color var(--transition);
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.input:focus, .select:focus { border-color: var(--border-focus); }
-.input::placeholder { color: var(--text-muted); }
-
-/* ── Score ring ─────────────────────────────────────────────────────────── */
-.score-ring {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 700;
-  flex-shrink: 0;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── Progress bar ───────────────────────────────────────────────────────── */
-.progress-bar {
-  height: 4px;
-  background: var(--bg-input);
-  border-radius: 999px;
-  overflow: hidden;
+/* Figures line up in columns. */
+.num {
+  font-variant-numeric: tabular-nums;
 }
 
-.progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--grad-brand);
-  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-/* ── Leaflet overrides ──────────────────────────────────────────────────── */
 .leaflet-container {
-  background: var(--bg-surface) !important;
-  font-family: var(--font-body) !important;
-  border-radius: var(--radius-lg);
+  font-family: var(--font-sans);
+  background: var(--subtle);
 }
 
-.leaflet-tile { filter: brightness(0.85) saturate(0.6); }
-
-.leaflet-popup-content-wrapper {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-md) !important;
-  box-shadow: var(--shadow-md) !important;
-  color: var(--text-primary) !important;
-}
-
-.leaflet-popup-tip { background: var(--bg-card) !important; }
-.leaflet-popup-content { margin: 12px 16px !important; }
-.leaflet-popup-content a { color: #60a5fa !important; }
-.leaflet-control-attribution { display: none !important; }
-.leaflet-control-zoom a,
-.leaflet-bar a {
-  background: var(--bg-card) !important;
-  color: var(--text-primary) !important;
-  border-color: var(--border) !important;
-}
-.leaflet-bar a:hover { background: var(--bg-input) !important; }
-.leaflet-control-scale-line {
-  background: rgba(6, 13, 26, 0.7) !important;
-  border-color: var(--text-muted) !important;
-  color: var(--text-secondary) !important;
-}
-
-/* Fullscreen map: the Fullscreen API only expands this element, so it
-   needs its own background (its parent card's background doesn't come
-   along) and the inner map surface needs to actually fill the screen
-   instead of staying pinned at its normal 360px card height. */
-.map-fullscreen {
-  background: var(--bg-surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.map-fullscreen .cluster-map-surface {
-  height: 100vh !important;
-  border-radius: 0 !important;
-}
-
-/* Themed tooltip for the map's custom controls (reset/fullscreen/list),
-   replacing the browser's plain native title="" tooltip. Same surface
-   treatment as the map's own popups (--bg-card + --shadow-md) so it reads
-   as part of this UI rather than a generic floating box. No transition --
-   toggled purely via display, so it appears/disappears with zero delay,
-   exactly on the hover event, not a moment after it. */
-.map-control-tooltip {
-  position: absolute;
-  z-index: 1200;
-  transform: translateY(-50%);
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-  padding: 6px 10px;
-  font-family: var(--font-body);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--text-primary);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.map-control-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: -5px;
-  width: 9px;
-  height: 9px;
-  transform: translateY(-50%) rotate(45deg);
-  background: var(--bg-card);
-  border-right: 1px solid var(--border);
-  border-top: 1px solid var(--border);
-}
-
-/* ── Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
-
-/* ── Animations ─────────────────────────────────────────────────────────── */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0 rgba(59, 110, 245, 0.5); }
-  70%  { box-shadow: 0 0 0 10px rgba(59, 110, 245, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(59, 110, 245, 0); }
-}
-
-.fade-up {
-  animation: fadeUp 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.pulse-ring { animation: pulse-ring 2s ease-out infinite; }
-
-/* ── Recharts overrides ─────────────────────────────────────────────────── */
-.recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
-  stroke: var(--border) !important;
-}
-
-.recharts-text { fill: var(--text-muted) !important; font-size: 11px !important; }
-.recharts-tooltip-wrapper { outline: none !important; }
-
-.custom-tooltip {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  font-size: 12px;
-}
-
-/* ── Empty state ────────────────────────────────────────────────────────── */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 48px 24px;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-
-.empty-state svg { opacity: 0.3; margin-bottom: 4px; }
-
-/* ── Loading skeleton ───────────────────────────────────────────────────── */
-@keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-
-.skeleton {
-  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-hover) 50%, var(--bg-surface) 75%);
-  background-size: 800px 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: var(--radius-sm);
+/* A quiet, grey basemap so only the verdict colours carry meaning. */
+.leaflet-tile-pane {
+  filter: grayscale(1) contrast(0.9) opacity(0.55);
 }

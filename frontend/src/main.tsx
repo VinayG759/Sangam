@@ -1,13 +1,18 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { createBrowserRouter, RouterProvider } from 'react-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { routes } from './routes'
 import './index.css'
-import App from './App.tsx'
-import CitizenPortal from './pages/CitizenPortal.tsx'
 
-const path = window.location.pathname;
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 60_000, retry: 1, refetchOnWindowFocus: false } },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {path === '/report' ? <CitizenPortal /> : <App />}
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={createBrowserRouter(routes)} />
+    </QueryClientProvider>
   </StrictMode>,
 )
