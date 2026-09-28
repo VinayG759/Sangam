@@ -38,6 +38,8 @@ os.environ.update({
     # Fixed test-only key so encrypted contacts can be exercised.
     "CONTACT_ENCRYPTION_KEY": "q9bYk0Qm2p8m9cRcS6o5Qx1k3Yv6wL0tJm4uZ7aB2cE=",
     "PUBLIC_APP_URL": "https://sangam.example",
+    # Fixed test-only brief signing key (bytes 0..31).
+    "BRIEF_SIGNING_KEY": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
 })
 
 import pytest  # noqa: E402
@@ -99,6 +101,9 @@ def migrated_database():
 
 @pytest.fixture(autouse=True)
 def clean_database():
+    from app.core.limiter import limiter
+
+    limiter.reset()  # each test starts with fresh rate-limit counters
     yield
     with get_engine().begin() as conn:
         conn.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))

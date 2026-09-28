@@ -11,6 +11,7 @@ import ReportsPage from '@/features/reports/Page'
 import ImpactPage from '@/features/impact/Page'
 import CitizenReportPage from '@/features/citizen-report/ReportPage'
 import TrackPage from '@/features/citizen-report/TrackPage'
+import VerifyPage from '@/features/verify/Page'
 
 export const routes: RouteObject[] = [
   {
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: '/simulator', element: <SimulatorPage />, errorElement: <RouteError /> },
       { path: '/impact', element: <ImpactPage />, errorElement: <RouteError /> },
       { path: '/reports', element: <ReportsPage />, errorElement: <RouteError /> },
+      { path: '/verify', element: <VerifyPage />, errorElement: <RouteError /> },
       { path: '*', element: <RouteError /> },
     ],
   },

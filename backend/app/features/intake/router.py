@@ -152,7 +152,8 @@ class TrackStatus(BaseModel):
 
 
 @web_router.get("/track/{tracking_id}", response_model=TrackStatus)
-def track(tracking_id: str, db: Session = Depends(get_db), pack: Pack = Depends(get_pack)):
+@limiter.limit("30/minute")  # tracking IDs are short; stop anyone guessing them in bulk
+def track(request: Request, tracking_id: str, db: Session = Depends(get_db), pack: Pack = Depends(get_pack)):
     report = db.scalar(select(Report).where(Report.tracking_id == tracking_id.strip().upper()))
     if not report:
         raise HTTPException(status_code=404, detail="No report with that tracking ID")

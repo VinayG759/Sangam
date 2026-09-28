@@ -13,6 +13,9 @@ from app.core.pack import get_pack
 from app.registry import enabled_routers
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# The HTTP client logs every request URL at INFO, and Telegram's URLs contain the bot token.
+for noisy in ("httpx", "httpcore"):
+    logging.getLogger(noisy).setLevel(logging.WARNING)
 
 settings = get_settings()
 app = FastAPI(title="Sangam API", version="2.0.0",

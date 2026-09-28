@@ -30,6 +30,7 @@ Environment variables (see `backend/.env.example` for what each one does):
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | bot token; a secret you choose |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET` | from the Meta app |
 | `CONTACT_ENCRYPTION_KEY` | encrypts citizens' chat IDs for status updates (leave empty to store none) |
+| `BRIEF_SIGNING_KEY` | signs exported PDF briefs (value prepared in `backend/.env.render`). Must match the public key in `docs/brief-signing-key.pub`, or every brief will fail verification |
 | `PUBLIC_APP_URL` | your Vercel URL, for tracking links in updates |
 | `WHATSAPP_NOTIFY_TEMPLATE` | name of the approved WhatsApp template (optional, see below) |
 | `SEED_DEMO` | `true` for the first deploy only (loads synthetic demo reports), then `false` |
@@ -81,7 +82,8 @@ Then send one real message on Telegram and one on WhatsApp and check they appear
 
 `.github/workflows/keepalive.yml` pings the API every 12 hours (Render sleeps after 15 minutes idle;
 Supabase pauses after 7 days). Add repository secrets `SANGAM_API_URL` and, to also re-run the analysis,
-`SANGAM_ADMIN_TOKEN`.
+`SANGAM_ADMIN_TOKEN`. The admin token also drives retention: each cycle deletes expired encrypted chat IDs
+and raw media past the pack's limit, so without it those deletions only happen when someone runs them.
 
 ## Rolling back
 

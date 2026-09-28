@@ -128,7 +128,15 @@ approve a deploy.
   and these reports have no place). Overview → district → block → recommendation is three clicks.
 - **Planned money:** a new verdict, "Planned, not started" (an **Audit** action), for places
   with high need where money is only planned. It won't show in the demo — we have no project data.
-- 114 automatic tests (106 backend, 8 dashboard), all passing. The Docker version was tested
+- **Extra security (Phase 7):** every PDF brief is now **digitally signed** — like a wax seal:
+  change one character and the seal breaks. Anyone can check a brief on the new "Verify a
+  brief" page, or offline with the public key in the repo. The security check-up found and
+  fixed a real leak: the Telegram bot's password (its token) would have been written into the
+  server's logs on every reply. Also added limits on how fast anyone can hit the tracking,
+  PDF and simulator pages. No known-vulnerable libraries.
+- **Public-good paperwork:** drafts of a privacy statement and a "do no harm" statement
+  (`docs/privacy.md`, `docs/do-no-harm.md`) — please read them; you submit the application.
+- 121 automatic tests (113 backend, 8 dashboard), all passing. The Docker version was tested
   end to end before Phase 5.
 
 **Two honest corrections the rewrite forced:**
@@ -345,18 +353,24 @@ slides.
    2. Then show where it came from — voice notes in several languages.
    3. Send a real voice note **live** during recording.
    4. Show the budget simulator.
-   5. Download the PDF report and show that every number has a source.
-   6. End with **"built for BRICS"**: show the India data folder next to the Brazil folder,
-      run the checker on screen, and say *"India is live on real data; Brazil is next —
-      the engine doesn't change."*
+   5. Download the PDF report and show that every number has a source. Then drop it on the
+      **Verify a brief** page — "Authentic" — and a copy with one character changed — "Altered".
+   6. End with **"built for BRICS"**: show the India data folder, run the checker on screen,
+      and say *"India runs on real data; Brazil is next — the engine doesn't change."* (There
+      is no Brazil folder yet, so don't show one.)
 
    **Never start the video with the chatbot or the form.**
 4. **Make the slides (10–12).** Problem → our insight (the join) → the verdicts → demo →
    how it works → why you can trust it → reach → **built for BRICS** → scale and how easy
    it is to deploy → competitors → roadmap (Brazil first) → team.
-5. **Write the 2–3 line description** (a draft is in the technical plan). It says
-   "deploys to any BRICS country by adding a data folder — live today on real Indian
-   government data."
+5. **Write the 2–3 line description.** Corrected draft (the first one wrongly said we use
+   government spending records):
+   > Sangam is an open-source Digital Public Good that hears citizens in their own language —
+   > voice, text or photo, over WhatsApp, Telegram or the web — and sets what they report beside
+   > official data, to show officials where public services are missing or failing on the
+   > ground. It ranks priorities with transparent arithmetic, checks every AI-written number
+   > against a cited source, and signs every brief so it cannot be quietly altered. A new BRICS
+   > country is a folder of data, not new code; it runs today on real Indian government data.
 6. **Tell the BRICS story honestly.** This is the question judges will ask most.
    - **What we *can* say, because it's true:**
      - the engine has nothing India-specific in it;
@@ -534,6 +548,11 @@ which is the whole point.
 ---
 
 ### Phase 7 — Extra security and "public good" status
+
+**✅ Built 28 Sep** (except step 4, which is yours). One change from the plan: the seal covers
+the **whole PDF file**, not just the numbers — otherwise someone could change the visible text
+and the seal would still look intact. Step 2 already runs every 12 hours through the
+"keepalive" job, once its two GitHub secrets are set during deploy.
 
 **What we do:**
 

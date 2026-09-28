@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # Empty = contact storage off: no chat ID is ever kept.
     CONTACT_ENCRYPTION_KEY: str = ""
 
+    # Ed25519 private key (base64, 32 bytes) that signs exported briefs. Empty = briefs are unsigned.
+    # See app/core/signing.py. Its public key is published in docs/brief-signing-key.pub.
+    BRIEF_SIGNING_KEY: str = ""
+
     # Public address of the dashboard, used in links sent to citizens (e.g. https://sangam.vercel.app).
     PUBLIC_APP_URL: str = ""
 

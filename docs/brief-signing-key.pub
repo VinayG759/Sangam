@@ -1,0 +1,4 @@
+# Sangam brief-signing public key (Ed25519, raw 32 bytes, base64).
+# Verify a brief offline:  cd backend && python -m scripts.verify_brief <brief.pdf>
+# Key ID: 6a4450a69681646e
+mnJhpjGALKgdb+sOHxLf5vJ27ltkg1zO8lPzjlF8f1Y=

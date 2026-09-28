@@ -205,6 +205,55 @@ def test_brief_pdf_contains_evidence_and_sources(client, ai, loaded):
     assert response.headers["content-type"] == "application/pdf"
     text = "".join(page.extract_text() for page in PdfReader(io.BytesIO(response.content)).pages)
     assert "Evidence" in text and "Test statistics office" in text and "synthetic" not in text
+    assert "digitally signed" in text and "https://sangam.example/verify" in text
+
+
+# ── Signed briefs ───────────────────────────────────────────────────────────
+
+
+def _brief(client, ai, loaded) -> bytes:
+    analysed(ai, loaded)
+    first = client.get("/api/v1/priorities").json()["items"][0]
+    return client.get(f"/api/v1/priorities/{first['id']}/brief.pdf").content
+
+
+def _verify(client, data: bytes) -> dict:
+    return client.post("/api/v1/verify", files={"file": ("brief.pdf", data, "application/pdf")}).json()
+
+
+def test_a_signed_brief_verifies_and_any_change_breaks_it(client, ai, loaded):
+    pdf = _brief(client, ai, loaded)
+    assert _verify(client, pdf)["status"] == "valid"
+
+    # Change one byte inside the document itself.
+    body_end = pdf.rfind(b"%%EOF")
+    position = body_end // 2
+    tampered = pdf[:position] + bytes([pdf[position] ^ 0x01]) + pdf[position + 1:]
+    assert _verify(client, tampered)["status"] == "tampered"
+
+    # Re-saved without the signature line, as a PDF editor would.
+    assert _verify(client, pdf[:pdf.rfind(b"\n%SANGAM-SIGNATURE ")])["status"] == "unsigned"
+
+
+def test_brief_signed_by_another_key_is_not_accepted(client, ai, loaded, monkeypatch):
+    from app.core import signing
+    from app.core.config import get_settings
+
+    pdf = _brief(client, ai, loaded)
+    monkeypatch.setattr(get_settings(), "BRIEF_SIGNING_KEY", "Hx4dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA=")
+    forged = signing.sign_pdf(pdf[:pdf.rfind(signing.MARKER)])
+    monkeypatch.undo()
+    assert _verify(client, forged)["status"] == "other_key"
+
+
+def test_briefs_verify_offline_with_the_published_key(client, ai, loaded):
+    from app.core.signing import verify_pdf
+
+    pdf = _brief(client, ai, loaded)
+    published = client.get("/api/v1/verify/public-key").json()
+    assert published["algorithm"] == "Ed25519"
+    assert verify_pdf(pdf, published["public_key"]).status == "valid"
+    assert PdfReader(io.BytesIO(pdf)).pages  # the signature line does not stop the PDF opening
 
 
 def test_pack_endpoint_describes_the_country(client, loaded):

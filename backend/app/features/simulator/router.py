@@ -11,12 +11,13 @@ delivery gaps need an audit, not more money, so they are listed separately.
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.limiter import limiter
 from app.core.pack import Pack, get_pack
 from app.core.runs import latest_complete_run
 from app.models import Priority, Region
@@ -50,7 +51,9 @@ def allocate(candidates: list[dict], budget: float) -> tuple[list[dict], float]:
 
 
 @router.post("/simulate")
-def simulate(body: SimulationRequest, db: Session = Depends(get_db), pack: Pack = Depends(get_pack)):
+@limiter.limit("30/minute")
+def simulate(request: Request, body: SimulationRequest, db: Session = Depends(get_db),
+             pack: Pack = Depends(get_pack)):
     run = latest_complete_run(db, pack.country_code)
     if not run:
         return {"funded": [], "total_cost": 0, "beneficiaries": 0, "candidates": 0, "audit_count": 0, "notes": []}

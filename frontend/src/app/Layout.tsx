@@ -1,5 +1,5 @@
 import { NavLink, Outlet, ScrollRestoration } from 'react-router'
-import { Activity, Calculator, LayoutGrid, ListOrdered, Map as MapIcon, MessageSquareText, Send } from 'lucide-react'
+import { Activity, Calculator, LayoutGrid, ListOrdered, Map as MapIcon, MessageSquareText, Send, ShieldCheck } from 'lucide-react'
 import { usePack } from '@/lib/pack'
 import { useOverview } from '@/features/overview/api'
 import { cx } from '@/lib/cx'
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/simulator', label: 'Budget simulator', icon: Calculator },
   { to: '/impact', label: 'Impact', icon: Activity },
   { to: '/reports', label: 'Citizen reports', icon: MessageSquareText },
+  { to: '/verify', label: 'Verify a brief', icon: ShieldCheck },
 ]
 
 function navClass({ isActive }: { isActive: boolean }) {

@@ -46,7 +46,9 @@ tested and committed locally; **nothing is deployed yet**. What it delivered, ma
 | Phase 7.2 media retention | **Done** — each analysis run deletes raw media older than the pack's limit |
 | Phase 4 impact + close the loop | **Done** — `features/impact` (JJM 2019→2026 progress vs residents, real data now; before/after-project comparison, switches on when project data exists) and `features/notify` (encrypted chat IDs, one update, then deleted; 180-day expiry). WhatsApp updates need a Meta-approved template |
 | Phase 5 national view | **Done** — region picker (`?region=`) scopes Overview and Priorities to a place and everything under it; `/rollup` ranks the places one level down by how many places inside need action; `/unlocated` counts unplaced reports **by reason only** (migration `0003`, `reports.location_failure`); new verdict `PLANNED_NOT_STARTED` (Audit group). Checked in a real browser: Overview → district → block → recommendation in three clicks |
-| Tests | 106 backend (real Postgres) + 8 frontend, all passing; the Docker image builds and passes the smoke test (Docker not re-run after Phase 5) |
+| Phase 7 security and DPG | **Done in code** — signed briefs (7.1), retention already scheduled by the keepalive workflow (7.2), security review with two fixes (7.3), `docs/privacy.md` + `docs/do-no-harm.md` drafts (7.4). DPGA application is Vinay's to submit. See "As built" in §7 |
+| Phase 1.5 description | **Draft corrected** — no longer claims spending records |
+| Tests | 113 backend (real Postgres) + 8 frontend, all passing; `pip-audit` and `npm audit` report no known vulnerabilities; the Docker image last built and passed the smoke test before Phase 5 |
 
 **Two corrections the rewrite forced — both about honesty:**
 
@@ -325,7 +327,7 @@ frontend/src/
 | 5th | 4 | Impact measurement + close the loop | Answer the "measure impact" part of the brief | 2–3 days | After Phase 6 | ✅ Done early (27 Sep) |
 | 6th | 3 | SaaS-grade UI | Dashboard a ministry would take seriously | 3–4 days | After Phase 4 | ✅ Done early (rewrite) |
 | 7th | 5 | National view + reach metrics + investment plans | "National policymakers", "Depth & Reach" | 2–3 days | After Phase 3 | ✅ Done early (27 Sep) — see "As built" in §7 |
-| 8th | 7 | Security & DPG hardening | Signed briefs, retention job, DPGA application | 2 days | Before finale | Not started |
+| 8th | 7 | Security & DPG hardening | Signed briefs, retention job, DPGA application | 2 days | Before finale | ✅ Code done early (28 Sep); DPGA application is Vinay's |
 | — | 8 | Deferred / cut | Explicitly *not* doing | — | — | — |
 
 The finale date is not yet announced. If it lands before all of this fits, cut from the
@@ -457,10 +459,13 @@ Unshipped polish counts for nothing; an unclear story loses Problem-Solution Fit
       across languages.
    3. 1:30 — Send a real voice note live on WhatsApp/Telegram; show the tracking ID.
    4. 2:10 — Budget simulator: "₹500 crore — what should we fund?", change weights.
-   5. 3:00 — Export the PDF brief. Show the verification: every number cites a source.
-   6. 3:40 — Built for BRICS: architecture in one diagram; show `packs/india/` beside
-      `packs/brazil/`, run the pack validator on screen, say plainly "India is live on real
-      government data; Brazil is the next pack." DPG + privacy.
+   5. 3:00 — Export the PDF brief: every number cites a source. Drop it on the **Verify a
+      brief** page ("Authentic and unchanged"), then a copy with one character edited
+      ("Altered after export").
+   6. 3:40 — Built for BRICS: architecture in one diagram; show `packs/india/` and run the pack
+      validator on screen; say plainly "India runs on real government data; Brazil is the next
+      pack, and the engine does not change." (There is no `packs/brazil/` yet — do not show
+      one.) DPG + privacy.
    Never open on the chatbot or the intake form.
 
 1.4 **Pitch deck (10–12 slides).** Problem (the broken loop) → Insight (the join) →
@@ -468,16 +473,17 @@ Unshipped polish counts for nothing; an unclear story loses Problem-Solution Fit
    verified numbers, privacy floor) → Reach (languages, channels) → **Built for BRICS**
    (see 1.6) → Scale (numbers from the design doc §2) + Deployability (packs, open source,
    $0 run cost) → Competitors ("they route complaints, we audit priorities") → Roadmap
-   (Phase 6 Brazil first, then 4, 3, 5, 7) → Team.
+   (Phase 6 Brazil first; Phases 2–5 and 7 are already built) → Team.
    Include the synthetic-data sentence (Appendix B, D-11) before anyone asks.
 
-1.5 **2–3 line description.** Draft:
-   > Sangam is an open-source Digital Public Good that joins multilingual citizen voice
-   > (WhatsApp, Telegram, web — voice, text, photo) with government spending records to
-   > find where public money is missing or stuck. It ranks infrastructure priorities with
-   > transparent arithmetic, verifies every AI-written number against its source, and
-   > deploys to any BRICS country by adding a data folder, not code — live today on real
-   > Indian government data.
+1.5 **2–3 line description.** Draft (corrected 28 Sep: the first draft said "government
+   spending records", which Sangam does not have — D-20):
+   > Sangam is an open-source Digital Public Good that hears citizens in their own language —
+   > voice, text or photo, over WhatsApp, Telegram or the web — and sets what they report beside
+   > official data, to show officials where public services are missing or failing on the
+   > ground. It ranks priorities with transparent arithmetic, checks every AI-written number
+   > against a cited source, and signs every brief so it cannot be quietly altered. A new BRICS
+   > country is a folder of data, not new code; it runs today on real Indian government data.
 
 1.6 **BRICS framing — honest, specific, checkable.** The brief says "across BRICS
    nations"; judges will ask "does it work outside India?" The answer must be true in
@@ -813,6 +819,31 @@ country, which is the claim.
 old file; DPGA application submitted (Vinay submits — it is an organisational
 declaration).
 
+**As built (28 Sep).**
+- **7.1 Signed briefs — changed from the plan.** Signing a hash of the evidence would let
+  someone edit the *visible* PDF text and still pass. So the signature covers **every byte of
+  the PDF** and is appended after `%%EOF` as one line (`%SANGAM-SIGNATURE <key id> <sig>`),
+  which PDF readers ignore. Run ID and evidence are inside the signed bytes. Re-saving in a PDF
+  editor drops the line, so the brief reads as unsigned. Key: `BRIEF_SIGNING_KEY` (base64
+  Ed25519 seed, env only; in `backend/.env` and `backend/.env.render`). Public key:
+  `docs/brief-signing-key.pub` (key ID `6a4450a69681646e`). `POST /api/v1/verify` (upload,
+  5 MB, 20/min, nothing stored) and `GET /api/v1/verify/public-key` replace the planned
+  `GET /verify/{run_id}`. Offline: `python -m scripts.verify_brief <pdf>`. Dashboard page
+  `/verify`. Checked on a real exported brief: valid → one byte changed → tampered (D-25).
+- **7.2 Retention — already scheduled.** The keepalive workflow (every 12 h) calls
+  `/admin/notify` (deletes expired chat IDs) and `/admin/runs` (deletes media past
+  `media_retention_days`). It runs only once the GitHub secrets `SANGAM_API_URL` and
+  `SANGAM_ADMIN_TOKEN` are set — a deploy step.
+- **7.3 Security review.** Webhooks: Telegram secret token and WhatsApp HMAC, both fail closed;
+  admin routes all behind the bearer token. **Fixed:** the HTTP client logged every request URL
+  at INFO, and Telegram URLs contain the bot token — every reply would have written the token
+  to Render's logs; `httpx`/`httpcore` now log at WARNING only (D-26). **Fixed:** rate limits
+  added to `/track/{id}` (30/min, stops bulk guessing of tracking IDs), brief export (20/min)
+  and `/simulate` (30/min). Tests assert no phone number, chat ID or bot token reaches the logs.
+  `pip-audit` and `npm audit`: no known vulnerabilities. No secrets in tracked files.
+- **7.4 DPG.** `docs/privacy.md` and `docs/do-no-harm.md` drafted from what the code does,
+  marked for Vinay's review before any application.
+
 ---
 
 ### Phase 8 — Deferred / cut (decided, not forgotten)
@@ -1012,6 +1043,8 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-21 | Ranking order | Fund/audit verdicts first, then hotspots to verify, then monitor; score orders within each tier | 27 Sep |
 | D-23 | Action group for `PLANNED_NOT_STARTED` | **Audit** — money is promised but nothing started; the official's question is "why is this stuck?", as for a stalled allocation. No fifth action group | 27 Sep |
 | D-24 | Unlocated reports drill-down | **Counts by reason only, never report text** (Vinay). Text is shown only for a place × need with ≥ 5 distinct reporters (D-10); an unlocated report has no place, so it can never qualify | 27 Sep |
+| D-25 | What a brief signature covers | **The whole PDF file**, not a hash of the evidence — otherwise the visible text could be edited without breaking the seal | 28 Sep |
+| D-26 | HTTP client logging | `httpx`/`httpcore` at WARNING: at INFO they log request URLs, and Telegram URLs carry the bot token | 28 Sep |
 | D-22 | Production database for v2 | **Pending — Vinay's decision:** new empty Supabase project (recommended) or reset the existing one | — |
 
 ---

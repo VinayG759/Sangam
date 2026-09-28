@@ -3,7 +3,7 @@
 import io
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -13,11 +13,15 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.limiter import limiter
 from app.core.pack import Pack, get_pack
+from app.core.signing import key_id, server_public_key, sign_pdf, signing_enabled, verify_pdf
 from app.models import Priority, Region, Report
 
 router = APIRouter(prefix="/api/v1", tags=["export"])
+MAX_BRIEF_BYTES = 5 * 1024 * 1024
 
 VERDICT_TITLES = {"UNSERVED_GAP": "Unserved gap — consider for allocation",
                   "STALLED_ALLOCATION": "Stalled allocation — audit delivery",
@@ -80,12 +84,42 @@ def build_brief(priority: Priority, region: Region, pack: Pack, synthetic_report
     if synthetic_reports:
         story.append(Paragraph(f"{synthetic_reports} of the citizen reports behind this brief are synthetic "
                                "demonstration data. All statistics are real and sourced.", small))
+    if signing_enabled():
+        where = f" at {get_settings().PUBLIC_APP_URL.rstrip('/')}/verify" if get_settings().PUBLIC_APP_URL else ""
+        story.append(Paragraph(f"This file is digitally signed. Check that it has not been altered{where}.", small))
+    else:
+        story.append(Paragraph("This file is not signed: no signing key is configured on this server.", small))
     doc.build(story)
-    return buffer.getvalue()
+    return sign_pdf(buffer.getvalue())
+
+
+@router.get("/verify/public-key")
+def public_key():
+    """The key that signs this server's briefs. The same key is published in docs/brief-signing-key.pub."""
+    key = server_public_key()
+    if key is None:
+        raise HTTPException(status_code=404, detail="This server does not sign briefs")
+    return {"algorithm": "Ed25519", "public_key": key, "key_id": key_id(key)}
+
+
+@router.post("/verify")
+@limiter.limit("20/minute")
+async def verify_brief(request: Request, file: UploadFile = File(...)):
+    """Is this PDF exactly as this server exported it? Nothing is stored."""
+    data = await file.read(MAX_BRIEF_BYTES + 1)
+    if len(data) > MAX_BRIEF_BYTES:
+        raise HTTPException(status_code=413, detail="File is larger than 5 MB")
+    key = server_public_key()
+    if key is None:
+        raise HTTPException(status_code=404, detail="This server does not sign briefs")
+    result = verify_pdf(data, key)
+    return {"status": result.status, "key_id": result.key_id, "server_key_id": key_id(key)}
 
 
 @router.get("/priorities/{priority_id}/brief.pdf")
-def export_brief(priority_id: int, db: Session = Depends(get_db), pack: Pack = Depends(get_pack)):
+@limiter.limit("20/minute")  # each brief is rendered and signed on request
+def export_brief(request: Request, priority_id: int, db: Session = Depends(get_db),
+                 pack: Pack = Depends(get_pack)):
     priority = db.scalar(select(Priority).where(Priority.id == priority_id, Priority.displayable.is_(True)))
     if not priority:
         raise HTTPException(status_code=404, detail="Priority not found")
