@@ -42,6 +42,8 @@ class CostRule(BaseModel):
     unit_label: str
     note: str
     source_url: str | None = None
+    # True when the rate is a made-up demonstration figure rather than a published one.
+    synthetic: bool = False
 
 
 class Weights(BaseModel):

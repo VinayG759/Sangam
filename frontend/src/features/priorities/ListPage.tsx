@@ -40,7 +40,7 @@ export default function PrioritiesPage() {
         description="Every place and need with enough residents reporting, ranked. Places needing action come first; within them, the score orders them. The score is arithmetic you can check — open any row to see it."
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3">
         <Segmented
           label="Action"
           value={group}
@@ -62,10 +62,10 @@ export default function PrioritiesPage() {
             <option key={n.key} value={n.key}>{n.label}</option>
           ))}
         </select>
-        <label className="relative">
+        <label className="relative w-full sm:w-auto">
           <span className="sr-only">Search places</span>
           <Search className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-faint" />
-          <input className={`${inputStyle} w-56 pl-8`} placeholder="Search a place" value={q} onChange={(e) => update('q', e.target.value)} />
+          <input className={`${inputStyle} w-full pl-8 sm:w-56`} placeholder="Search a place" value={q} onChange={(e) => update('q', e.target.value)} />
         </label>
       </div>
 
@@ -78,16 +78,46 @@ export default function PrioritiesPage() {
       ) : shown.length === 0 ? (
         <EmptyState title="Nothing matches these filters" />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-          <table className="w-full min-w-[760px] text-left">
+        <>
+        {/* Phones: one card per recommendation. */}
+        <ul className="space-y-2 md:hidden">
+          {shown.map((p) => (
+            <li key={p.id}>
+              <Link to={`/priorities/${p.id}`} className="block rounded-lg border border-line bg-surface p-3 active:bg-subtle">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">
+                      <span className="num mr-1.5 text-faint">{p.rank}</span>
+                      {p.region.name}
+                    </div>
+                    <div className="truncate text-[12px] text-faint">
+                      {[p.region.level_name, p.region.parent_name].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                  <VerdictBadge verdict={p.verdict} />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
+                  <span>{p.sector_label}</span>
+                  <span><span className="num text-ink">{formatNumber(p.distinct_reporters)}</span> residents</span>
+                  <span><span className="num text-ink">{formatRatio(p.baseline_ratio)}</span> typical</span>
+                  <span>score <span className="num text-ink">{formatNumber(p.score, 1)}</span></span>
+                  {p.is_emerging && <span className="inline-flex items-center gap-0.5 text-delivery"><TrendingUp className="size-3" /> emerging</span>}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {/* Wider screens: a table with fixed column widths, so filtering never shifts the columns. */}
+        <div className="hidden overflow-x-auto rounded-lg border border-line bg-surface md:block">
+          <table className="w-full min-w-[760px] table-fixed text-left">
             <thead className="text-[12px] text-faint">
               <tr className="border-b border-line">
-                <th className="px-4 py-2.5 font-normal">#</th>
+                <th className="w-14 px-4 py-2.5 font-normal">#</th>
                 <th className="px-2 py-2.5 font-normal">Place</th>
-                <th className="px-2 py-2.5 font-normal">Need</th>
-                <th className="px-2 py-2.5 font-normal">Verdict</th>
-                <th className="px-2 py-2.5 text-right font-normal">Residents</th>
-                <th className="px-2 py-2.5 text-right font-normal" title="Reports per head compared with the median place for this need">vs typical</th>
+                <th className="w-44 px-2 py-2.5 font-normal">Need</th>
+                <th className="w-48 px-2 py-2.5 font-normal">Verdict</th>
+                <th className="w-24 px-2 py-2.5 text-right font-normal">Residents</th>
+                <th className="w-24 px-2 py-2.5 text-right font-normal" title="Reports per head compared with the median place for this need">vs typical</th>
                 <th className="w-40 px-4 py-2.5 font-normal">Score</th>
               </tr>
             </thead>
@@ -99,7 +129,7 @@ export default function PrioritiesPage() {
                   className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle"
                 >
                   <td className="num px-4 py-2.5 text-faint">{p.rank}</td>
-                  <td className="px-2 py-2.5">
+                  <td className="truncate px-2 py-2.5">
                     <Link to={`/priorities/${p.id}`} onClick={(e) => e.stopPropagation()} className="font-medium hover:text-accent">
                       {p.region.name}
                     </Link>
@@ -112,7 +142,7 @@ export default function PrioritiesPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-2 py-2.5 text-muted">{p.sector_label}</td>
+                  <td className="truncate px-2 py-2.5 text-muted">{p.sector_label}</td>
                   <td className="px-2 py-2.5"><VerdictBadge verdict={p.verdict} /></td>
                   <td className="num px-2 py-2.5 text-right">{formatNumber(p.distinct_reporters)}</td>
                   <td className="num px-2 py-2.5 text-right text-muted">{formatRatio(p.baseline_ratio)}</td>
@@ -129,6 +159,7 @@ export default function PrioritiesPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       {query.data?.run && (
         <p className="mt-3 text-[12px] text-faint">

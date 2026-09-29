@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { Link } from 'react-router'
 import { cx } from '@/lib/cx'
 
@@ -23,10 +23,10 @@ export function Panel({ title, actions, children, className, flush }: {
   flush?: boolean
 }) {
   return (
-    <section className={cx('rounded-lg border border-line bg-surface', className)}>
+    <section className={cx('min-w-0 rounded-lg border border-line bg-surface', className)}>
       {title && (
-        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <h2 className="text-[13px] font-semibold">{title}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-line px-4 py-3">
+          <h2 className="min-w-0 text-[13px] font-semibold">{title}</h2>
           {actions}
         </div>
       )}
@@ -53,7 +53,7 @@ export function Stat({ label, value, hint, to }: { label: string; value: ReactNo
   )
 }
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }
+type ButtonProps = ComponentProps<'button'> & { variant?: 'primary' | 'secondary' }
 
 export function Button({ variant = 'secondary', className, ...props }: ButtonProps) {
   return (
@@ -91,19 +91,24 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
   label: string
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border border-line bg-surface p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full overflow-x-auto rounded-md border border-line bg-surface p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
+          type="button"
           role="radio"
           aria-checked={value === option.value}
           onClick={() => onChange(option.value)}
           className={cx(
-            'h-8 rounded px-3 text-[13px] transition-colors',
-            value === option.value ? 'bg-subtle font-medium text-ink' : 'text-muted hover:text-ink',
+            'h-8 shrink-0 rounded px-3 text-[13px] whitespace-nowrap transition-colors',
+            value === option.value ? 'bg-subtle text-ink' : 'text-muted hover:text-ink',
           )}
         >
-          {option.label}
+          {/* An invisible bold copy reserves the selected width, so switching never shifts the labels. */}
+          <span className="grid">
+            <span aria-hidden className="invisible col-start-1 row-start-1 font-medium">{option.label}</span>
+            <span className={cx('col-start-1 row-start-1', value === option.value && 'font-medium')}>{option.label}</span>
+          </span>
         </button>
       ))}
     </div>

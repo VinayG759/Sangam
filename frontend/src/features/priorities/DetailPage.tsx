@@ -4,6 +4,7 @@ import { ArrowLeft, Download, ShieldCheck, TrendingUp } from 'lucide-react'
 import { apiUrl } from '@/lib/api'
 import { formatDate, formatMoney, formatNumber, languageName } from '@/lib/format'
 import { usePack } from '@/lib/pack'
+import { DemoTag } from '@/ui/DemoTag'
 import { VERDICTS } from '@/lib/verdicts'
 import { Figure } from '@/ui/Figure'
 import { Button, ButtonLink, Panel, Tag } from '@/ui/primitives'
@@ -80,7 +81,10 @@ export default function PriorityDetailPage() {
               {p.evidence.map((fact) => (
                 <tr key={fact.id} className="border-b border-line align-top last:border-0">
                   <td className="w-10 px-4 py-2.5 text-[12px] text-faint">{fact.id}</td>
-                  <td className="px-2 py-2.5">{fact.label}</td>
+                  <td className="px-2 py-2.5">
+                    {fact.label}
+                    {fact.synthetic && <DemoTag />}
+                  </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">
                     <Figure source={{ name: fact.source_name, url: fact.source_url, period: fact.period }}>
                       {fact.unit === currency ? formatMoney(fact.value, currency, symbol) : formatNumber(fact.value, 2)}

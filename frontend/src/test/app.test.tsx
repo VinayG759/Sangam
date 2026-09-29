@@ -99,3 +99,25 @@ describe('region scope', () => {
     expect(withRegion('/priorities?group=fund', 'KA 1')).toBe('/priorities?group=fund&region=KA%201')
   })
 })
+
+describe('resident pages in every language', () => {
+  it('has every string, non-empty, in every language', async () => {
+    const { STRINGS, LANGUAGES } = await import('@/features/citizen-report/i18n')
+    const keys = Object.keys(STRINGS.en)
+    for (const { code } of LANGUAGES) {
+      const strings = STRINGS[code] as Record<string, string>
+      expect(Object.keys(strings).sort()).toEqual([...keys].sort())
+      for (const key of keys) expect(strings[key].trim(), `${code}.${key}`).not.toBe('')
+    }
+  })
+})
+
+describe('chart axis labels', () => {
+  it('spaces labels evenly and always shows the last point without crowding it', async () => {
+    const { xTicks } = await import('@/lib/ticks')
+    expect(xTicks(12, 6)).toEqual([0, 2, 4, 6, 8, 11]) // 10 would crowd 11
+    expect(xTicks(12, 4)).toEqual([0, 3, 6, 9, 11])
+    expect(xTicks(1, 4)).toEqual([0])
+    expect(xTicks(0, 4)).toEqual([])
+  })
+})

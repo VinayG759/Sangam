@@ -196,7 +196,8 @@ export default function ImpactPage() {
         ) : projects.data.projects.length === 0 ? (
           <p className="text-muted">No project has been completed yet.</p>
         ) : (
-          <table className="w-full text-left">
+          <div className="-mx-4 overflow-x-auto px-4">
+          <table className="w-full min-w-[560px] text-left">
             <thead className="text-[12px] text-faint">
               <tr className="border-b border-line">
                 <th className="py-2 pr-2 font-normal">Project</th>
@@ -224,6 +225,7 @@ export default function ImpactPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Panel>
     </>

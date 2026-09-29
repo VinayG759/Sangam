@@ -18,9 +18,9 @@ population:
   label: rural households
 
 # Which statistic says how well served a place already is, per need.
-# Only water has real data today (Jal Jeevan Mission). Needs without a rule
-# are still ranked on demand and reach; their deficit term drops out and the
-# recommendation says so.
+# Only water has real data today (Jal Jeevan Mission). A need whose statistic
+# has no values loaded is still ranked on demand and reach; its deficit term
+# drops out and the recommendation says so.
 indicators:
   water:
     key: water.piped_household_pct
@@ -32,6 +32,40 @@ indicators:
     # DELIVERY_GAP: records say served, residents say otherwise.
     served_threshold: 80
     baseline_key: water.piped_household_pct_2019
+  # The five rules below name statistics India does not publish per block in
+  # one place yet. Their VALUES come only from scripts/seed_demo.py and are
+  # marked synthetic in the database and on every screen. Without the demo
+  # seeder, these needs simply have no statistic and show as hotspots.
+  road:
+    key: road.allweather_habitations_pct
+    label: Habitations connected by an all-weather road
+    unit: percent
+    served_threshold: 90
+    baseline_key: road.allweather_habitations_pct_2019
+  electricity:
+    key: electricity.reliable_supply_households_pct
+    label: Households with 20+ hours of daily power
+    unit: percent
+    served_threshold: 85
+    baseline_key: electricity.reliable_supply_households_pct_2019
+  health:
+    key: health.phc_doctor_in_post_pct
+    label: Primary health centres with a doctor in post
+    unit: percent
+    served_threshold: 90
+    baseline_key: health.phc_doctor_in_post_pct_2019
+  sanitation:
+    key: sanitation.functional_toilet_households_pct
+    label: Households with a functional toilet
+    unit: percent
+    served_threshold: 90
+    baseline_key: sanitation.functional_toilet_households_pct_2019
+  education:
+    key: education.usable_classroom_schools_pct
+    label: Schools with usable classrooms
+    unit: percent
+    served_threshold: 90
+    baseline_key: education.usable_classroom_schools_pct_2019
 
 # Budget-simulator planning assumptions. NOT sanctioned amounts — always shown
 # as estimates, with the derivation.
@@ -44,6 +78,32 @@ costs:
       Mission's total outlay of ₹3.60 lakh crore (2019) divided by the roughly
       16 crore rural households that lacked a tap connection at launch.
     source_url: https://jaljeevanmission.gov.in/
+  # Demonstration rates, so the simulator works for every need. Not official figures.
+  road:
+    per_unit: 18000
+    unit_label: household reached by an all-weather road
+    note: Demonstration assumption for the prototype, not an official rate.
+    synthetic: true
+  electricity:
+    per_unit: 9000
+    unit_label: household given reliable supply
+    note: Demonstration assumption for the prototype, not an official rate.
+    synthetic: true
+  health:
+    per_unit: 4000
+    unit_label: household served by a staffed health centre
+    note: Demonstration assumption for the prototype, not an official rate.
+    synthetic: true
+  sanitation:
+    per_unit: 15000
+    unit_label: household given a functional toilet
+    note: Demonstration assumption for the prototype, not an official rate.
+    synthetic: true
+  education:
+    per_unit: 6000
+    unit_label: household served by a usable school
+    note: Demonstration assumption for the prototype, not an official rate.
+    synthetic: true
 
 # Scoring weights: a political judgement, set by the government, not the engine.
 #   demand   - how loudly this place is asking, relative to the median place

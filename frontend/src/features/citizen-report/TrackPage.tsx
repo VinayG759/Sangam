@@ -9,6 +9,7 @@ import { VERDICTS } from '@/lib/verdicts'
 import { cx } from '@/lib/cx'
 import { Button, inputStyle } from '@/ui/primitives'
 import { ErrorState, Skeleton } from '@/ui/states'
+import { useLanguage } from './i18n'
 import { Shell } from './ReportPage'
 
 interface Track {
@@ -21,18 +22,20 @@ interface Track {
   rank: number | null
 }
 
-const STEPS = [
-  { key: 'received', label: 'Received' },
-  { key: 'understood', label: 'Understood', hint: 'Language, need and urgency recognised' },
-  { key: 'located', label: 'Placed on the map', hint: 'Grouped with others reporting the same need nearby' },
-  { key: 'prioritised', label: 'In the priority list', hint: 'Enough residents reported for officials to see it' },
-] as const
+const STEPS = ['received', 'understood', 'located', 'prioritised'] as const
 
 export default function TrackPage() {
   const { trackingId } = useParams()
   const navigate = useNavigate()
   const [input, setInput] = useState(trackingId ?? '')
   const pack = usePack()
+  const [lang, setLang, t] = useLanguage()
+  const steps = [
+    { key: 'received', label: t.stReceived, hint: null },
+    { key: 'understood', label: t.stUnderstood, hint: t.stUnderstoodHint },
+    { key: 'located', label: t.stLocated, hint: t.stLocatedHint },
+    { key: 'prioritised', label: t.stPrioritised, hint: t.stPrioritisedHint },
+  ]
   const query = useQuery({
     queryKey: ['track', trackingId],
     queryFn: () => get<Track>(`/api/v1/track/${encodeURIComponent(trackingId!)}`),
@@ -40,11 +43,11 @@ export default function TrackPage() {
     retry: false,
   })
 
-  const reached = query.data ? STEPS.findIndex((s) => s.key === query.data.stage) : -1
+  const reached = query.data ? STEPS.findIndex((s) => s === query.data.stage) : -1
 
   return (
-    <Shell>
-      <h1 className="text-xl font-semibold tracking-tight">Track a report</h1>
+    <Shell lang={lang} onLang={setLang} t={t}>
+      <h1 className="text-xl font-semibold tracking-tight">{t.trackTitle}</h1>
       <form
         className="mt-4 flex gap-2"
         onSubmit={(e) => {
@@ -52,27 +55,25 @@ export default function TrackPage() {
           if (input.trim()) navigate(`/track/${input.trim().toUpperCase()}`)
         }}
       >
-        <input className={`${inputStyle} num flex-1 uppercase`} placeholder="SG-XXXXXX" value={input} onChange={(e) => setInput(e.target.value)} />
-        <Button variant="primary" type="submit">Check</Button>
+        <input dir="ltr" aria-label={t.trackTitle} className={`${inputStyle} num min-w-0 flex-1 uppercase`} placeholder="SG-XXXXXX" value={input} onChange={(e) => setInput(e.target.value)} />
+        <Button variant="primary" type="submit">{t.check}</Button>
       </form>
 
       <div className="mt-6">
         {query.isFetching && <Skeleton className="h-48" />}
-        {query.isError && <ErrorState error={query.error} title="Report not found" />}
+        {query.isError && <ErrorState error={query.error} title={t.notFound} />}
         {query.data && !query.isFetching && (
           <div className="rounded-lg border border-line bg-surface p-5">
             <div className="num text-lg font-semibold">{query.data.tracking_id}</div>
             <p className="text-muted">
               {[query.data.sector && needLabel(pack.data, query.data.sector), query.data.region_name].filter(Boolean).join(' · ')}
-              {' · '}received {formatDate(query.data.received_at)}
+              {' · '}{t.receivedOn} {formatDate(query.data.received_at)}
             </p>
             {query.data.stage === 'unlocated' ? (
-              <p className="mt-4 text-muted">
-                We could not work out the place for this report. It is saved and counted, but cannot be shown on the map.
-              </p>
+              <p className="mt-4 text-muted">{t.unlocated}</p>
             ) : (
               <ol className="mt-5 space-y-4">
-                {STEPS.map((step, i) => (
+                {steps.map((step, i) => (
                   <li key={step.key} className="flex gap-3">
                     <span
                       className={cx(
@@ -84,10 +85,10 @@ export default function TrackPage() {
                     </span>
                     <div>
                       <div className={i <= reached ? 'font-medium' : 'text-muted'}>{step.label}</div>
-                      {'hint' in step && <div className="text-[12px] text-faint">{step.hint}</div>}
+                      {step.hint && <div className="text-[12px] text-faint">{step.hint}</div>}
                       {step.key === 'prioritised' && query.data.verdict && (
                         <div className="mt-1 text-[13px]">
-                          {VERDICTS[query.data.verdict].label} · rank {query.data.rank}
+                          {VERDICTS[query.data.verdict].label} · {t.rank} {query.data.rank}
                         </div>
                       )}
                     </div>
@@ -99,7 +100,7 @@ export default function TrackPage() {
         )}
       </div>
       <p className="mt-6 text-center text-[12px]">
-        <Link to="/report" className="text-accent">Report a new problem</Link>
+        <Link to="/report" className="text-accent">{t.reportNew}</Link>
       </p>
     </Shell>
   )

@@ -1,11 +1,13 @@
 import { NavLink, Outlet, ScrollRestoration } from 'react-router'
-import { Activity, Calculator, LayoutGrid, ListOrdered, Map as MapIcon, MessageSquareText, Send, ShieldCheck } from 'lucide-react'
+import { Activity, Calculator, ChartColumn, LayoutGrid, ListOrdered, Map as MapIcon, MessageSquareText, Send, ShieldCheck } from 'lucide-react'
 import { usePack } from '@/lib/pack'
 import { useOverview } from '@/features/overview/api'
 import { cx } from '@/lib/cx'
+import { DemoTag } from '@/ui/DemoTag'
 
 const NAV = [
   { to: '/', label: 'Overview', icon: LayoutGrid, end: true },
+  { to: '/analytics', label: 'Analytics', icon: ChartColumn },
   { to: '/priorities', label: 'Priorities', icon: ListOrdered },
   { to: '/map', label: 'Map', icon: MapIcon },
   { to: '/simulator', label: 'Budget simulator', icon: Calculator },
@@ -60,9 +62,10 @@ export function Layout() {
       <main className="min-w-0 flex-1">
         {synthetic > 0 && (
           <div className="border-b border-line bg-subtle px-4 py-2 text-[12px] text-muted md:px-8">
-            <span className="font-medium text-ink">Demonstration data.</span>{' '}
-            {synthetic.toLocaleString('en-IN')} of the citizen reports are synthetic. Places, households and water
-            coverage are real government data, and every figure links to its source.
+            <span className="font-medium text-ink">Prototype with demonstration data.</span>{' '}
+            The {synthetic.toLocaleString('en-IN')} citizen reports, the public projects, and the statistics for needs
+            other than water are synthetic, and marked <DemoTag inline />. Places, households and water tap coverage are
+            real government data. Every verdict and ranking is computed by the real engine.
           </div>
         )}
         <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">

@@ -48,13 +48,18 @@ tested and committed locally; **nothing is deployed yet**. What it delivered, ma
 | Phase 5 national view | **Done** — region picker (`?region=`) scopes Overview and Priorities to a place and everything under it; `/rollup` ranks the places one level down by how many places inside need action; `/unlocated` counts unplaced reports **by reason only** (migration `0003`, `reports.location_failure`); new verdict `PLANNED_NOT_STARTED` (Audit group). Checked in a real browser: Overview → district → block → recommendation in three clicks |
 | Phase 7 security and DPG | **Done in code** — signed briefs (7.1), retention already scheduled by the keepalive workflow (7.2), security review with two fixes (7.3), `docs/privacy.md` + `docs/do-no-harm.md` drafts (7.4). DPGA application is Vinay's to submit. See "As built" in §7 |
 | Phase 1.5 description | **Draft corrected** — no longer claims spending records |
-| Tests | 113 backend (real Postgres) + 8 frontend, all passing; `pip-audit` and `npm audit` report no known vulnerabilities; the Docker image last built and passed the smoke test before Phase 5 |
+| Demo data v2 (29 Sep) | **Done** — synthetic projects, statistics and unplaced reports so every verdict and view works (D-27); migration `0004` adds `is_synthetic` to indicators and projects; DEMO labels on screen and in briefs |
+| Analytics page (29 Sep) | **Done** — `/analytics` + `GET /api/v1/analytics`: KPI tiles, reports per week, verdict mix, verdicts by need, official progress (dumbbell), places needing action, money by status, completed-project outcomes, languages; region-scoped; table view for every chart. Verdict chart colours validated for colour-blind separation in light and dark |
+| UI fixes (29 Sep) | Segmented switch no longer shifts labels; Priorities table has fixed columns and a phone card layout; no page scrolls sideways at 375–1440 px (measured) |
+| Resident pages (29 Sep) | Report and Track pages in all 8 pack languages (Urdu right-to-left), photo preview with change/remove, voice preview with remove and a timer, "discard or continue" guard. Translations need a native-speaker review |
+| Voice in other languages (29 Sep) | Tested with browser-recorded WebM clips in Hindi, Kannada and Tamil through the real intake: correct need every time. Prompt fixed so transcripts stay in the speaker's own script (Kannada had come back romanised, Tamil as Cyrillic). The lite model is still inconsistent on audio — Sarvam speech-to-text proposed (D-28) |
+| Tests | 116 backend (real Postgres) + 10 frontend, all passing; `pip-audit` and `npm audit` report no known vulnerabilities; the Docker image last built and passed the smoke test before Phase 5 |
 
 **Two corrections the rewrite forced — both about honesty:**
 
 1. **There is no real spending data.** `packs/india/sanctioned_projects.csv` is empty; every
    spending line the old dashboard showed was invented by the old seed script. The rewrite never
-   invents spending. The real join is citizen demand × **Jal Jeevan Mission tap-connection
+   invents spending *in a pack*; since 29 Sep the demo seeder adds labelled synthetic projects (D-27). The real join is citizen demand × **Jal Jeevan Mission tap-connection
    coverage** (real, sourced, 2019 and 2026): high demand where JJM reports ≥ 80% coverage is a
    `DELIVERY_GAP` — records say served, residents disagree. `STALLED_ALLOCATION` stays in the
    engine and will appear as soon as real project data is loaded (Phase 6 / data work).
@@ -446,10 +451,11 @@ Unshipped polish counts for nothing; an unclear story loses Problem-Solution Fit
      documents.
    - Add `CONTRIBUTING.md` (how to add a country pack) — this is DPG evidence.
 
-1.2 **Demo dataset.** ✅ `python -m scripts.seed_demo` — 4,704 synthetic reports in six
-   languages, marked `is_synthetic`. Places, households and tap coverage are real JJM/LGD
-   data. There is **no real spending data**, so the demo shows `UNSERVED_GAP`,
-   `DELIVERY_GAP`, `DEMAND_HOTSPOT` and `MONITOR` — never an invented `STALLED_ALLOCATION`.
+1.2 **Demo dataset.** ✅ `python -m scripts.seed_demo --reset` (rewritten 29 Sep, D-27) —
+   ~5,100 synthetic reports in six languages (40 unplaced, with reasons), 78 synthetic projects
+   in every status, and synthetic statistics for roads, power, health, sanitation and schools.
+   All marked `is_synthetic` and labelled DEMO. Places, households and water tap coverage stay
+   real JJM/LGD data. The real engine then produces all six verdicts and every view.
 
 1.3 **Demo script (video, 3–5 min).**
    1. 0:00 — Open on a `DELIVERY_GAP` with its evidence chain: "Jal Jeevan Mission reports
@@ -1029,7 +1035,7 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-8 | License | Apache-2.0 (patent grant) — LICENSE file to be added in Phase 1 | 16 Aug |
 | D-9 | Stalled allocations | Separate list from unserved gaps ("fund this" ≠ "send an inspector") | 16 Aug |
 | D-10 | Privacy floor | 5 distinct reporters to display; small clusters still count toward scoring | 16 Aug |
-| D-11 | Synthetic data | Volunteer it: *"The citizen messages are synthetic, generated to mirror plausible complaint patterns. The places, the number of rural households and the share with a tap connection are real government data, and every number links to its source. We don't have district spending data yet, so Sangam doesn't invent it."* (Corrected 27 Sep: the original sentence claimed budget lines were real; they were not.) | 16 Aug, corrected 27 Sep |
+| D-11 | Synthetic data | Volunteer it: *"The citizen messages are synthetic, generated to mirror plausible complaint patterns. The places, the number of rural households and the share with a tap connection are real government data, and every number links to its source. The citizen reports, the project spending and the statistics for needs other than water are demonstration data, marked DEMO wherever they appear; the engine that turns them into verdicts is exactly the one that would run on real data."* (Corrected 27 Sep: the original sentence claimed budget lines were real; they were not. Updated 29 Sep for D-27.) | 16 Aug, corrected 27 and 29 Sep |
 | D-12 | Retention | Redacted text indefinite; raw audio/photo 90 days | 16 Aug |
 | D-13 | Judge access | Open read-only link, no login | 16 Aug |
 | D-14 | Gemini tier | Free tier through build; paid only in final week if needed | 25 Aug |
@@ -1039,12 +1045,14 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-17 | Official scope wording | **"Across BRICS nations"** — Brazil is the first post-submission build (Phase 6); pitch frames it honestly before then | 27 Sep |
 | D-18 | Submission deadline | **30 Sep 2026** confirmed — only Phases 0–1 before submission | 27 Sep |
 | D-19 | Rewrite now vs patch | **Full rewrite now** (Vinay's decision); production keeps the old code until the new version passes its checks and Vinay approves a deploy | 27 Sep |
-| D-20 | Spending data | **Never invented.** Verdicts join demand to real statistics; `DEMAND_HOTSPOT` where no statistic exists | 27 Sep |
+| D-20 | Spending data | **Never invented** in a country pack. For the demo, superseded by D-27 (synthetic, labelled) | 27 Sep, amended 29 Sep |
 | D-21 | Ranking order | Fund/audit verdicts first, then hotspots to verify, then monitor; score orders within each tier | 27 Sep |
 | D-23 | Action group for `PLANNED_NOT_STARTED` | **Audit** — money is promised but nothing started; the official's question is "why is this stuck?", as for a stalled allocation. No fifth action group | 27 Sep |
 | D-24 | Unlocated reports drill-down | **Counts by reason only, never report text** (Vinay). Text is shown only for a place × need with ≥ 5 distinct reporters (D-10); an unlocated report has no place, so it can never qualify | 27 Sep |
 | D-25 | What a brief signature covers | **The whole PDF file**, not a hash of the evidence — otherwise the visible text could be edited without breaking the seal | 28 Sep |
 | D-26 | HTTP client logging | `httpx`/`httpcore` at WARNING: at INFO they log request URLs, and Telegram URLs carry the bot token | 28 Sep |
+| D-27 | Demonstration data | **Vinay, 29 Sep: the prototype uses fake data wherever real data is missing, so every feature can be shown working; the evaluation, arithmetic and verdicts must be real.** Supersedes D-20 for the demo. Condition kept: every synthetic row is marked `is_synthetic` and labelled DEMO on screen and in briefs; country packs never contain made-up rows | 29 Sep |
+| D-28 | Voice transcription | Gemini-lite classifies and translates correctly but its native-script transcripts are inconsistent on audio. Proposed: Sarvam speech-to-text for audio, Gemini for classification, Gemini as fallback — pending Vinay's Sarvam key | 29 Sep |
 | D-22 | Production database for v2 | **Pending — Vinay's decision:** new empty Supabase project (recommended) or reset the existing one | — |
 
 ---

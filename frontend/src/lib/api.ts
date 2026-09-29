@@ -84,6 +84,7 @@ export interface Fact {
   period?: string | null
   source_name: string | null
   source_url: string | null
+  synthetic?: boolean // made-up demonstration data, labelled on screen
 }
 
 export interface Region {

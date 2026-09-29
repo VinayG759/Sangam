@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.pack import Pack, get_pack
-from app.core.regions import country_regions, subtree_ids
+from app.core.regions import children_map, country_regions, starting_place, subtree_ids
 from app.core.runs import latest_complete_run
 from app.models import Cluster, Priority, Region, Report
 
@@ -85,20 +85,15 @@ def rollup(region: str | None = None, db: Session = Depends(get_db), pack: Pack 
     top-level place loaded opens on the places inside it.
     """
     regions = country_regions(db, pack.country_code)
-    children: dict[str, list[Region]] = {}
-    for r in regions.values():
-        if r.parent_id:
-            children.setdefault(r.parent_id, []).append(r)
+    children = children_map(regions)
     if region:
         if region not in regions:
             raise HTTPException(status_code=404, detail="Region not found")
         parent = regions[region]
     else:
-        parent = next((r for r in regions.values() if r.level == 0), None)
+        parent = starting_place(regions, children)
         if parent is None:
             return {"parent": None, "path": [], "level_name": None, "items": []}
-        while len(children.get(parent.id, [])) == 1:
-            parent = children[parent.id][0]
 
     run = latest_complete_run(db, pack.country_code)
     rows = []

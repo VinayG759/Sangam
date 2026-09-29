@@ -7,6 +7,7 @@ export interface VerdictMeta {
   text: string // Tailwind text colour class
   soft: string // Tailwind background class
   hex: string // for the map, which can't use classes
+  viz: string // chart mark colour (theme-aware CSS variable)
 }
 
 export const VERDICTS: Record<Verdict, VerdictMeta> = {
@@ -16,7 +17,8 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     meaning: 'Many residents report the problem and official data says the place is not served.',
     text: 'text-unserved',
     soft: 'bg-unserved-soft',
-    hex: '#b42318',
+    viz: 'var(--viz-unserved)',
+    hex: '#e34948',
   },
   DELIVERY_GAP: {
     label: 'Delivery gap',
@@ -24,7 +26,8 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     meaning: 'Official data says the place is served, but many residents say otherwise.',
     text: 'text-delivery',
     soft: 'bg-delivery-soft',
-    hex: '#b54708',
+    viz: 'var(--viz-delivery)',
+    hex: '#eda100',
   },
   STALLED_ALLOCATION: {
     label: 'Stalled allocation',
@@ -32,7 +35,8 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     meaning: 'Money is committed here, yet residents still report the problem.',
     text: 'text-stalled',
     soft: 'bg-stalled-soft',
-    hex: '#7a3fb0',
+    viz: 'var(--viz-stalled)',
+    hex: '#4a3aa7',
   },
   PLANNED_NOT_STARTED: {
     label: 'Planned, not started',
@@ -40,7 +44,8 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     meaning: 'Money is planned for this place but no work has started, and many residents report the problem.',
     text: 'text-planned',
     soft: 'bg-planned-soft',
-    hex: '#a3136f',
+    viz: 'var(--viz-planned)',
+    hex: '#e87ba4',
   },
   DEMAND_HOTSPOT: {
     label: 'Demand hotspot',
@@ -48,7 +53,8 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     meaning: 'Many residents report the problem, but no official data is loaded yet to confirm the gap.',
     text: 'text-hotspot',
     soft: 'bg-hotspot-soft',
-    hex: '#1d5fa8',
+    viz: 'var(--viz-hotspot)',
+    hex: '#2a78d6',
   },
   MONITOR: {
     label: 'Monitor',
@@ -56,6 +62,7 @@ export const VERDICTS: Record<Verdict, VerdictMeta> = {
     meaning: 'Demand is close to the typical place.',
     text: 'text-monitor',
     soft: 'bg-monitor-soft',
+    viz: 'var(--viz-monitor)',
     hex: '#8a8580',
   },
 }

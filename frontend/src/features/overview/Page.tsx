@@ -66,7 +66,7 @@ export default function OverviewPage() {
             <Stat label="Demand hotspots" value={formatNumber(v.DEMAND_HOTSPOT ?? 0)} hint="Verify — no official data yet" to={to('/priorities?group=verify')} />
           </div>
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-3">
+          <div className="mt-6 grid gap-6 lg:grid-cols-3 [&>*]:min-w-0">
             <div className="space-y-6 lg:col-span-2 lg:self-start">
               <Panel
                 title="Top priorities"
@@ -83,9 +83,9 @@ export default function OverviewPage() {
                       <tr className="border-b border-line">
                         <th className="px-4 py-2 font-normal">#</th>
                         <th className="px-2 py-2 font-normal">Place</th>
-                        <th className="px-2 py-2 font-normal">Need</th>
+                        <th className="hidden px-2 py-2 font-normal lg:table-cell">Need</th>
                         <th className="px-2 py-2 font-normal">Verdict</th>
-                        <th className="px-4 py-2 text-right font-normal">Residents</th>
+                        <th className="hidden px-4 py-2 text-right font-normal lg:table-cell">Residents</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -94,11 +94,12 @@ export default function OverviewPage() {
                           <td className="num px-4 py-2 text-faint">{p.rank}</td>
                           <td className="px-2 py-2">
                             <Link to={`/priorities/${p.id}`} className="font-medium hover:text-accent">{p.region.name}</Link>
-                            {p.region.parent_name && <span className="ml-1.5 text-[12px] text-faint">{p.region.parent_name}</span>}
+                            {p.region.parent_name && <span className="ml-1.5 hidden text-[12px] text-faint lg:inline">{p.region.parent_name}</span>}
+                            <div className="text-[12px] text-muted lg:hidden">{p.sector_label}</div>
                           </td>
-                          <td className="px-2 py-2 text-muted">{p.sector_label}</td>
+                          <td className="hidden px-2 py-2 text-muted lg:table-cell">{p.sector_label}</td>
                           <td className="px-2 py-2"><VerdictBadge verdict={p.verdict} /></td>
-                          <td className="num px-4 py-2 text-right">{formatNumber(p.distinct_reporters)}</td>
+                          <td className="num hidden px-4 py-2 text-right lg:table-cell">{formatNumber(p.distinct_reporters)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -167,7 +168,8 @@ function RollupPanel({ region, onSelect }: { region: string; onSelect: (id: stri
       actions={<Breadcrumb path={data.path} onSelect={onSelect} />}
       flush
     >
-      <table className="w-full text-left">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-left">
         <thead className="text-[12px] text-faint">
           <tr className="border-b border-line">
             <th className="px-4 py-2 font-normal">Place</th>
@@ -191,6 +193,7 @@ function RollupPanel({ region, onSelect }: { region: string; onSelect: (id: stri
           ))}
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }

@@ -71,6 +71,8 @@ class Indicator(Base):
     period: Mapped[str] = mapped_column(String(20))
     source_name: Mapped[str | None] = mapped_column(Text)
     source_url: Mapped[str | None] = mapped_column(Text)
+    # Demonstration data added by scripts/seed_demo.py, never by a country pack.
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class Project(Base):
@@ -89,6 +91,7 @@ class Project(Base):
     completion_date: Mapped[date | None] = mapped_column(Date)
     source_name: Mapped[str | None] = mapped_column(Text)
     source_url: Mapped[str | None] = mapped_column(Text)
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 # ── Citizen intake ────────────────────────────────────────────────────────────

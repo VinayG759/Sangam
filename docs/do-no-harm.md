@@ -45,10 +45,10 @@ calling a place unserved.
 
 **Risk.** Demonstration or placeholder data is mistaken for real government records.
 
-**What Sangam does.** Sangam never fabricates spending data: if none is loaded, no money
-figures appear. Synthetic citizen reports are marked in the database and labelled on every
-screen and brief. Exported briefs are digitally signed so a recipient can detect an altered
-copy.
+**What Sangam does.** Demonstration data (synthetic reports, projects and statistics) is
+marked `is_synthetic` in the database and labelled DEMO on every screen and brief; a country
+pack itself never contains made-up rows. Exported briefs are digitally signed so a recipient
+can detect an altered copy.
 
 ## 5. Excluding people who cannot use it
 

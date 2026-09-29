@@ -58,6 +58,8 @@ def build_brief(priority: Priority, region: Region, pack: Pack, synthetic_report
         unit = fact.get("unit") or ""
         period = f" ({fact['period']})" if fact.get("period") else ""
         source = fact.get("source_name") or ""
+        if fact.get("synthetic") and "Synthetic" not in source:
+            source = "<b>Demo data.</b> " + source
         if fact.get("source_url"):
             source += f"<br/><font size=7>{fact['source_url']}</font>"
         rows.append([fact["id"], Paragraph(fact["label"], cell), Paragraph(f"{shown} {unit}{period}", cell),
@@ -81,9 +83,10 @@ def build_brief(priority: Priority, region: Region, pack: Pack, synthetic_report
     story += [Spacer(1, 12), Paragraph(
         f"Analysis run {priority.run_id} · generated {datetime.now(timezone.utc):%d %b %Y %H:%M} UTC · "
         "Ranking is arithmetic set by the weights in the country pack; the AI never decides the order.", small)]
-    if synthetic_reports:
-        story.append(Paragraph(f"{synthetic_reports} of the citizen reports behind this brief are synthetic "
-                               "demonstration data. All statistics are real and sourced.", small))
+    if synthetic_reports or any(f.get("synthetic") for f in priority.evidence):
+        story.append(Paragraph("Prototype demonstration: evidence marked as synthetic or demo data is made up to "
+                               "show how Sangam works. The ranking, verdict and arithmetic above were computed by "
+                               "the real engine from it. Facts citing a government source are real.", small))
     if signing_enabled():
         where = f" at {get_settings().PUBLIC_APP_URL.rstrip('/')}/verify" if get_settings().PUBLIC_APP_URL else ""
         story.append(Paragraph(f"This file is digitally signed. Check that it has not been altered{where}.", small))

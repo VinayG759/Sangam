@@ -39,11 +39,13 @@ people. Once completed-project data is loaded, complaints before and after each 
 
 ## Data honesty
 
-The citizen messages in the live demo are **synthetic**, generated to mirror plausible patterns and
-marked as such everywhere they appear. Everything else — the places, the number of rural households and
-the share with a tap connection — is **real government data** (Local Government Directory and Jal Jeevan
-Mission, Karnataka), and every number links to its source. Sangam does not invent spending: where no
-spending data is loaded, it says so.
+The live demo is a **prototype with demonstration data**. Three inputs are **synthetic**: the citizen
+reports, the public projects (spending), and the statistics for needs other than water. Each synthetic row is
+marked `is_synthetic` in the database and labelled **DEMO** on every screen and in every PDF brief.
+The places, the number of rural households and the share with a tap connection are **real government
+data** (Local Government Directory and Jal Jeevan Mission, Karnataka), each linked to its source.
+The engine that groups reports, scores places, gives verdicts and ranks them is the same code that would
+run on real data; only its inputs are made up. Reload with `python -m scripts.seed_demo --reset`.
 
 ## Built for any country (BRICS)
 

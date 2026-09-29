@@ -28,7 +28,7 @@ class AIUnavailable(Exception):
 
 class Understanding(BaseModel):
     language: str = Field(description="ISO 639-1 code of the language the citizen used, e.g. kn, hi, en")
-    transcript: str = Field(description="What the citizen said, in their own language. Replace personal names, phone numbers and ID numbers with [redacted].")
+    transcript: str = Field(description="What the citizen said, in their own language and script. Replace names of people, phone numbers and ID numbers with [redacted]. Never redact place names.")
     text_en: str = Field(description="Faithful English translation of the transcript, with the same redactions.")
     sector: str = Field(description="Exactly one need key from the allowed list.")
     urgency: int = Field(ge=1, le=5, description="1 = minor inconvenience, 5 = danger to life or health right now.")
@@ -81,7 +81,14 @@ class GeminiClient:
         prompt = (
             f"A citizen in {pack.country_name} is reporting a local infrastructure problem to the government. "
             f"They may write or speak in any language; common ones here: {', '.join(pack.languages)}.\n"
-            f"If audio is attached, transcribe it first. If a photo is attached, describe the problem it shows.\n"
+            # Without the script rule, the model romanised Kannada and produced Cyrillic for Tamil (tested 29 Sep).
+            "If audio is attached: first identify the spoken language, then transcribe it word for word in that "
+            "language's OWN native script (for example Kannada in Kannada script, Tamil in Tamil script, Hindi in "
+            "Devanagari, Urdu in Urdu script). Never romanise and never use another alphabet. If you cannot make out "
+            "the words, say so in the transcript rather than guessing.\n"
+            "If a photo is attached, describe the problem it shows.\n"
+            "List every place name mentioned in place_names, in its base form without grammatical endings "
+            "(for example 'Ankola', not 'Ankolavil' or 'Ankoladalli').\n"
             f"Classify the need as exactly one of these keys, or '{pack.fallback_need}' if none fits:\n{needs}\n"
             "Never invent a place name that was not mentioned."
         )

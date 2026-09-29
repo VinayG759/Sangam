@@ -331,3 +331,40 @@ def test_unlocated_reports_are_counted_by_reason_and_never_shown(client, loaded)
         "no_place_named": 2, "gave_up_after_questions": 1, "not_recorded": 1, "awaiting_place": 1}
     assert all(set(r) == {"reason", "count"} for r in body["reasons"])
     assert "pump" not in response.text
+
+
+# ── Analytics ───────────────────────────────────────────────────────────────
+
+
+def test_analytics_totals_match_the_other_views(client, ai, loaded):
+    analysed(ai, loaded)
+    body = client.get("/api/v1/analytics").json()
+    overview = client.get("/api/v1/overview").json()
+    assert body["totals"]["reports"] == overview["reports"]["total"] == 49
+    assert len(body["timeline"]) == 12
+    by_need = {n["sector"]: n["verdicts"] for n in body["needs"]}
+    assert by_need["water"] == overview["verdicts"]  # every shown verdict is a water one in the fixture
+    assert body["totals"]["places_needing_action"] == 3  # Southmere, Northfield, Eastbrook
+    assert {m["status"] for m in body["money"]} == {"in_progress"}
+    water = next(p for p in body["progress"] if p["sector"] == "water")
+    assert {r["name"] for r in water["rows"]} >= {"Northfield", "Southmere"}
+
+
+def test_analytics_timeline_counts_whole_weeks_and_leaves_out_the_current_one(client, ai, loaded):
+    from datetime import datetime, timedelta, timezone
+
+    with new_session() as db:
+        add_reports(db, "TL-A-SOUTH", "water", 4, days_ago=15, prefix="older")
+    today = datetime.now(timezone.utc).date()
+    this_monday = today - timedelta(days=today.weekday())
+    weeks = {w["week"]: w["reports"] for w in client.get("/api/v1/analytics").json()["timeline"]}
+    assert this_monday.isoformat() not in weeks  # the unfinished week would look like a sudden drop
+    older = today - timedelta(days=15)
+    assert weeks[(older - timedelta(days=older.weekday())).isoformat()] == 4
+
+
+def test_analytics_scopes_to_a_region(client, ai, loaded):
+    analysed(ai, loaded)
+    body = client.get("/api/v1/analytics", params={"region": "TL-A-NORTH"}).json()
+    assert body["totals"]["reports"] == 15 and body["totals"]["places_needing_action"] == 1
+    assert client.get("/api/v1/analytics", params={"region": "NOWHERE"}).status_code == 404

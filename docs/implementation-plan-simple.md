@@ -136,12 +136,18 @@ approve a deploy.
   PDF and simulator pages. No known-vulnerable libraries.
 - **Public-good paperwork:** drafts of a privacy statement and a "do no harm" statement
   (`docs/privacy.md`, `docs/do-no-harm.md`) — please read them; you submit the application.
-- 121 automatic tests (113 backend, 8 dashboard), all passing. The Docker version was tested
+- **29 Sep, your list:** demo data for every feature (labelled DEMO); a new **Analytics**
+  page of charts; the Fund/Audit switch no longer jiggles; every page fits phones and tablets;
+  the report form speaks all 8 languages (Urdu right-to-left); photo preview with change/remove;
+  a "discard or continue?" warning; voice notes tested in Hindi, Kannada and Tamil.
+- 126 automatic tests (116 backend, 10 dashboard), all passing. The Docker version was tested
   end to end before Phase 5.
 
 **Two honest corrections the rewrite forced:**
 1. **We have no real spending data.** The old dashboard's budget lines were made up by the old
-   setup script. The new Sangam never makes up money. Its real finding is stronger anyway:
+   setup script *and presented as real*. (Update 29 Sep: you decided the prototype should use fake
+   data wherever real data is missing, so every feature can be shown working. It is now **labelled
+   DEMO everywhere** — that labelling is the difference from the old version.) Its real finding is stronger anyway:
    *the government's water data says homes here have taps, and residents say no water comes*
    — a **delivery gap**.
 2. **We can't call a place "unserved" without data.** For roads, power, health, schools and
@@ -344,8 +350,10 @@ slides.
    - Add a short guide on "how to add a new country."
 2. **Prepare the demo data.** ✅ Done — 4,704 practice citizen messages. **These are made
    up, and we say so openly.** The places, the number of households and the water-tap
-   coverage are real government data. **Budgets are not** — we have no real spending data,
-   so Sangam doesn't show any. (The old plan said budgets were real. That was wrong.)
+   coverage are real government data. **Since 29 Sep the demo also has made-up projects
+   (spending) and made-up statistics for roads, power, health, sanitation and schools**, all
+   labelled DEMO, so every verdict and page has something real to compute. The maths is real;
+   only the inputs are fake.
 3. **Record the video (3–5 minutes).** The order matters:
    1. **Start with the punchline:** a "delivery gap" — "The government's own water data says
       95% of homes here have a tap. These residents say the water never comes." Records say

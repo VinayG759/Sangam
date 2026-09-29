@@ -31,6 +31,36 @@
   --color-monitor-soft: var(--monitor-soft);
 }
 
+/*
+ * Chart marks. Validated with the dataviz palette checker (colour-blind and
+ * normal-vision separation, per mode). Text never uses these; badges keep the
+ * darker text tokens above.
+ */
+:root {
+  --viz-unserved: #e34948;
+  --viz-delivery: #eda100;
+  --viz-stalled: #4a3aa7;
+  --viz-planned: #e87ba4;
+  --viz-hotspot: #2a78d6;
+  --viz-monitor: #b8b2ac;
+  --viz-accent: #0f766e;
+  --viz-muted: #c9c4be;
+  --viz-grid: #ecebe9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --viz-unserved: #d0413e;
+    --viz-delivery: #b88900;
+    --viz-stalled: #9085e9;
+    --viz-planned: #d55181;
+    --viz-hotspot: #3987e5;
+    --viz-monitor: #6f6a65;
+    --viz-accent: #3fb8a8;
+    --viz-muted: #4a4643;
+    --viz-grid: #2a2826;
+  }
+}
+
 :root {
   --canvas: #fafaf9;
   --surface: #ffffff;

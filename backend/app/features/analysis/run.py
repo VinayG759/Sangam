@@ -137,7 +137,8 @@ def _run(db: Session, ai: AIClient, pack: Pack, run: AnalysisRun, summaries: int
 
         displayable = s.input.distinct_reporters >= floor
         rank = rank + 1 if displayable else rank
-        facts = _evidence(pack, regions[s.input.region_id], s, indicators, projects, population, len(recent))
+        facts = _evidence(pack, regions[s.input.region_id], s, indicators, projects, population, len(recent),
+                          synthetic_reports=any(r.is_synthetic for r in group))
         priority = Priority(
             run_id=run.id, cluster_id=cluster.id, region_id=s.input.region_id, sector=s.input.sector,
             rank=rank if displayable else 0, verdict=s.verdict, score=s.score, components=s.components,
@@ -180,12 +181,14 @@ def _fmt(value: float, decimals: int = 1) -> float | int:
     return int(rounded) if rounded == int(rounded) else rounded
 
 
-def _evidence(pack: Pack, region: Region, s: Scored, indicators, projects, population, recent: int) -> list[dict]:
-    """The closed set of facts a summary may use. Every one carries its source."""
+def _evidence(pack: Pack, region: Region, s: Scored, indicators, projects, population, recent: int,
+              synthetic_reports: bool = False) -> list[dict]:
+    """The closed set of facts a summary may use. Every one carries its source, and says if it is demo data."""
     need = pack.need(s.input.sector)
     facts = [
         {"id": "F1", "label": f"Distinct residents reporting {need.label_en.lower()} problems",
-         "value": s.input.distinct_reporters, "unit": "people", "source_name": CITIZEN_SOURCE, "source_url": None},
+         "value": s.input.distinct_reporters, "unit": "people", "source_name": CITIZEN_SOURCE, "source_url": None,
+         "synthetic": synthetic_reports},
         {"id": "F2", "label": "Demand compared with the median place for this need", "value": _fmt(s.baseline_ratio),
          "unit": "times", "source_name": "Computed by Sangam from F1 and F4", "source_url": None},
     ]
@@ -207,12 +210,14 @@ def _evidence(pack: Pack, region: Region, s: Scored, indicators, projects, popul
             if ind:
                 label = f"{rule.label or key} ({ind.period})"
                 facts.append({"id": fact_id, "label": label, "value": _fmt(ind.value), "unit": ind.unit,
-                              "period": ind.period, "source_name": ind.source_name, "source_url": ind.source_url})
+                              "period": ind.period, "source_name": ind.source_name, "source_url": ind.source_url,
+                              "synthetic": ind.is_synthetic})
     for i, project in enumerate(projects[(region.id, s.input.sector)][:3], start=1):
         facts.append({"id": f"P{i}", "label": f"{project.title} ({project.status.replace('_', ' ')})",
                       "value": float(project.amount) if project.amount is not None else None, "unit": project.currency,
                       "period": project.sanctioned_date.isoformat() if project.sanctioned_date else None,
-                      "source_name": project.source_name, "source_url": project.source_url})
+                      "source_name": project.source_name, "source_url": project.source_url,
+                      "synthetic": project.is_synthetic})
     if recent:
         facts.append({"id": "F7", "label": f"Residents reporting in the last {pack.thresholds.emerging_window_days} days",
                       "value": recent, "unit": "people", "source_name": CITIZEN_SOURCE, "source_url": None})
@@ -221,7 +226,9 @@ def _evidence(pack: Pack, region: Region, s: Scored, indicators, projects, popul
         facts.append({"id": "F8", "label": f"Estimated cost to connect the unserved (planning assumption: "
                       f"{pack.currency_symbol}{cost.per_unit:,.0f} per {cost.unit_label})",
                       "value": round(s.estimated_cost), "unit": pack.currency, "source_name": cost.note,
-                      "source_url": cost.source_url})
+                      "source_url": cost.source_url, "synthetic": cost.synthetic})
+    for fact in facts:  # figures computed from the citizen reports share their demo status
+        fact.setdefault("synthetic", synthetic_reports if fact["id"] in ("F2", "F3", "F7") else False)
     return facts
 
 

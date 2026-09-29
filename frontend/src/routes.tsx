@@ -3,6 +3,7 @@ import type { RouteObject } from 'react-router'
 import { Layout } from '@/app/Layout'
 import { RouteError } from '@/app/RouteError'
 import OverviewPage from '@/features/overview/Page'
+import AnalyticsPage from '@/features/analytics/Page'
 import PrioritiesPage from '@/features/priorities/ListPage'
 import PriorityDetailPage from '@/features/priorities/DetailPage'
 import MapPage from '@/features/map/Page'
@@ -20,6 +21,7 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { path: '/', element: <OverviewPage />, errorElement: <RouteError /> },
+      { path: '/analytics', element: <AnalyticsPage />, errorElement: <RouteError /> },
       { path: '/priorities', element: <PrioritiesPage />, errorElement: <RouteError /> },
       { path: '/priorities/:id', element: <PriorityDetailPage />, errorElement: <RouteError /> },
       { path: '/map', element: <MapPage />, errorElement: <RouteError /> },

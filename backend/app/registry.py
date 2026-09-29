@@ -7,6 +7,7 @@ from fastapi import APIRouter
 
 from app.core.config import get_settings
 from app.features.analysis.router import router as analysis_router
+from app.features.analytics.router import router as analytics_router
 from app.features.export.router import router as export_router
 from app.features.impact.router import router as impact_router
 from app.features.intake.router import admin_router as intake_admin_router
@@ -24,6 +25,7 @@ def enabled_routers() -> list[APIRouter]:
     routers: list[tuple[APIRouter, bool]] = [
         (regions_router, True),
         (overview_router, True),
+        (analytics_router, True),
         (priorities_router, True),
         (reports_router, True),
         (analysis_router, True),

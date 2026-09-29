@@ -25,7 +25,8 @@ export function Figure({ children, source }: { children: ReactNode; source?: Sou
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none invisible absolute bottom-full left-0 z-20 mb-1.5 w-64 rounded-md border border-line bg-surface p-2.5 text-[12px] font-normal leading-snug text-muted opacity-0 shadow-sm transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+        // display:none (not visibility) so a hidden tooltip never widens the page on small screens
+        className="pointer-events-none absolute right-0 bottom-full z-20 mb-1.5 hidden w-64 max-w-[80vw] rounded-md border border-line bg-surface p-2.5 text-left text-[12px] font-normal leading-snug text-muted shadow-sm group-focus-within:block group-hover:block"
       >
         <span className="block text-ink">{source.name}</span>
         {source.period && <span className="block">Period: {source.period}</span>}
