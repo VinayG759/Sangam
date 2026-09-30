@@ -1,5 +1,9 @@
-import { NavLink, Outlet, ScrollRestoration } from 'react-router'
-import { Activity, Calculator, ChartColumn, LayoutGrid, ListOrdered, Map as MapIcon, MessageSquareText, Send, ShieldCheck } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router'
+import {
+  Activity, Calculator, ChartColumn, LayoutGrid, ListOrdered, Map as MapIcon, Menu, MessageSquareText, Send,
+  ShieldCheck, X,
+} from 'lucide-react'
 import { usePack } from '@/lib/pack'
 import { useOverview } from '@/features/overview/api'
 import { cx } from '@/lib/cx'
@@ -18,8 +22,45 @@ const NAV = [
 
 function navClass({ isActive }: { isActive: boolean }) {
   return cx(
-    'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors whitespace-nowrap',
+    'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[14px] transition-colors md:py-1.5 md:text-[13px]',
     isActive ? 'bg-subtle font-medium text-ink' : 'text-muted hover:bg-subtle hover:text-ink',
+  )
+}
+
+function Brand({ country }: { country?: string }) {
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <img src="/favicon.svg" alt="" className="size-6" />
+      <div className="leading-tight">
+        <div className="text-[14px] font-semibold">Sangam</div>
+        <div className="text-[11px] text-faint">{country ?? ' '}</div>
+      </div>
+    </div>
+  )
+}
+
+/** Navigation and footer, shared by the desktop sidebar and the phone drawer. */
+function NavContent() {
+  return (
+    <>
+      <nav aria-label="Main" className="flex flex-col gap-0.5">
+        {NAV.map(({ to, label, icon: Icon, end }) => (
+          <NavLink key={to} to={to} end={end} className={navClass}>
+            <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="mt-auto space-y-3">
+        <a href="/report" className="flex items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-muted hover:text-ink">
+          <Send className="size-3.5" strokeWidth={1.75} />
+          Citizen report form
+        </a>
+        <p className="px-1 text-[11px] leading-relaxed text-faint">
+          Open-source Digital Public Good. Rankings are arithmetic; AI only writes explanations.
+        </p>
+      </div>
+    </>
   )
 }
 
@@ -27,37 +68,96 @@ export function Layout() {
   const pack = usePack()
   const overview = useOverview('') // whole country: the demo-data notice is not region-specific
   const synthetic = overview.data?.reports.synthetic ?? 0
+  const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const closeButton = useRef<HTMLButtonElement>(null)
+  const current = NAV.find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)))
+
+  // Picking a page closes the menu.
+  const [lastPath, setLastPath] = useState(location.pathname)
+  if (lastPath !== location.pathname) {
+    setLastPath(location.pathname)
+    setMenuOpen(false)
+  }
+
+  // While open: Escape closes it, the page behind does not scroll, focus moves into the menu and back out.
+  useEffect(() => {
+    if (!menuOpen) return
+    const button = menuButton.current
+    closeButton.current?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    window.addEventListener('keydown', onKey)
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = overflow
+      button?.focus()
+    }
+  }, [menuOpen])
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="shrink-0 border-b border-line bg-surface md:w-56 md:border-r md:border-b-0">
-        <div className="flex flex-col gap-4 p-3 md:sticky md:top-0 md:h-screen md:p-4">
-          <div className="flex items-center gap-2 px-1">
-            <img src="/favicon.svg" alt="" className="size-6" />
-            <div className="leading-tight">
-              <div className="text-[14px] font-semibold">Sangam</div>
-              <div className="text-[11px] text-faint">{pack.data?.country_name ?? ' '}</div>
-            </div>
-          </div>
-          <nav aria-label="Main" className="-mx-1 flex gap-1 overflow-x-auto px-1 md:mx-0 md:flex-col md:overflow-visible md:px-0">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
-              <NavLink key={to} to={to} end={end} className={navClass}>
-                <Icon className="size-4 shrink-0" strokeWidth={1.75} />
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="mt-auto hidden space-y-3 md:block">
-            <a href="/report" className="flex items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-muted hover:text-ink">
-              <Send className="size-3.5" strokeWidth={1.75} />
-              Citizen report form
-            </a>
-            <p className="px-1 text-[11px] leading-relaxed text-faint">
-              Open-source Digital Public Good. Rankings are arithmetic; AI only writes explanations.
-            </p>
-          </div>
+      {/* Desktop and tablet: a fixed sidebar. */}
+      <aside className="hidden shrink-0 border-r border-line bg-surface md:block md:w-56">
+        <div className="sticky top-0 flex h-screen flex-col gap-4 p-4">
+          <Brand country={pack.data?.country_name} />
+          <NavContent />
         </div>
       </aside>
+
+      {/* Phones: a slim top bar with a menu button. */}
+      <header className="sticky top-0 z-[1050] flex items-center justify-between gap-3 border-b border-line bg-surface px-3 py-2 md:hidden">
+        <Brand country={pack.data?.country_name} />
+        <div className="flex min-w-0 items-center gap-2">
+          {current && <span className="truncate text-[13px] text-muted">{current.label}</span>}
+          <button
+            ref={menuButton}
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
+            className="inline-flex size-10 items-center justify-center rounded-md text-ink hover:bg-subtle"
+          >
+            <Menu className="size-5" />
+            <span className="sr-only">Open menu</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Phones: the menu slides in from the left, over a dimmed page. */}
+      <div className={cx('fixed inset-0 z-[1100] md:hidden', !menuOpen && 'pointer-events-none')} aria-hidden={!menuOpen}>
+        <div
+          className={cx('absolute inset-0 bg-black/40 transition-opacity duration-200', menuOpen ? 'opacity-100' : 'opacity-0')}
+          onClick={() => setMenuOpen(false)}
+        />
+        <div
+          id="mobile-menu"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu"
+          inert={!menuOpen}
+          className={cx(
+            'absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col gap-4 overflow-y-auto bg-surface p-4 shadow-xl transition-transform duration-200 motion-reduce:transition-none',
+            menuOpen ? 'translate-x-0' : '-translate-x-full',
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <Brand country={pack.data?.country_name} />
+            <button
+              ref={closeButton}
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              className="inline-flex size-10 items-center justify-center rounded-md text-muted hover:bg-subtle hover:text-ink"
+            >
+              <X className="size-5" />
+              <span className="sr-only">Close menu</span>
+            </button>
+          </div>
+          <NavContent />
+        </div>
+      </div>
 
       <main className="min-w-0 flex-1">
         {synthetic > 0 && (
