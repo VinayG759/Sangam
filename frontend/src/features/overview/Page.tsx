@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router'
 import { ChevronRight, TrendingUp } from 'lucide-react'
 import type { Verdict } from '@/lib/api'
-import { formatDateTime, formatNumber, languageName } from '@/lib/format'
+import { formatDateTime, formatNumber } from '@/lib/format'
 import { usePack } from '@/lib/pack'
 import { useRegionParam, withRegion } from '@/lib/regions'
 import { VERDICT_ORDER, VERDICTS } from '@/lib/verdicts'
@@ -10,8 +10,6 @@ import { RegionPicker } from '@/ui/RegionPicker'
 import { EmptyState, ErrorState, Skeleton } from '@/ui/states'
 import { VerdictBadge } from '@/ui/VerdictBadge'
 import { type Rollup, useOverview, useRollup, useTopPriorities, useUnlocated } from './api'
-
-const CHANNEL_NAMES: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', web: 'Web form', seed: 'Seeded' }
 
 const UNLOCATED_REASONS: Record<string, string> = {
   no_place_named: 'No place mentioned',
@@ -111,7 +109,7 @@ export default function OverviewPage() {
             </div>
 
             <div className="space-y-6">
-              <Panel title="Reach">
+              <Panel title="Reach" actions={<Link to={to('/analytics')} className="text-[12px] text-accent">Charts →</Link>}>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
                   <Metric label="Citizen reports" value={formatNumber(data.reports.total)} />
                   <Metric label="Places reporting" value={formatNumber(data.regions_covered)} />
@@ -137,14 +135,6 @@ export default function OverviewPage() {
               </Panel>
 
               {data.reports.unlocated !== null && <UnlocatedPanel />}
-
-              <Panel title="Languages received">
-                <Bars rows={data.languages.map((l) => ({ label: languageName(l.code), value: l.count }))} />
-              </Panel>
-
-              <Panel title="Channels">
-                <Bars rows={data.channels.map((c) => ({ label: CHANNEL_NAMES[c.channel] ?? c.channel, value: c.count }))} />
-              </Panel>
             </div>
           </div>
         </>

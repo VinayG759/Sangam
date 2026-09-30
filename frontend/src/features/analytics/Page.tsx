@@ -14,6 +14,7 @@ import { useAnalytics, useImpactProjects } from './api'
 const STATUS_NAMES: Record<string, string> = {
   planned: 'Planned', sanctioned: 'Sanctioned', in_progress: 'In progress', stalled: 'Stalled', completed: 'Completed',
 }
+const CHANNEL_NAMES: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', web: 'Web form', seed: 'Seeded' }
 const OUTCOMES: [string, string][] = [
   ['IMPROVED', 'Complaints fell'], ['NO_CHANGE', 'No clear change'], ['WORSENED', 'Complaints rose'],
   ['TOO_EARLY', 'Too early to tell'], ['INSUFFICIENT_DATA', 'Too few reports'],
@@ -141,23 +142,8 @@ export default function AnalyticsPage() {
               </ChartPanel>
             )}
 
-            <ChartPanel
-              title={`Where action is needed${rollup.data?.level_name ? `, by ${rollup.data.level_name}` : ''}`}
-              subtitle="Places inside each with a fund or audit verdict. Click to zoom in."
-              table={<DataTable head={['Place', 'Needing action']} rows={(rollup.data?.items ?? []).map((i) => [i.name, formatNumber(i.places_needing_action)])} />}
-            >
-              {rollup.isPending ? <Skeleton className="h-64" /> : (
-                <BarList
-                  rows={(rollup.data?.items ?? []).slice(0, 12).map((i) => ({
-                    key: i.id, label: i.name, value: i.places_needing_action,
-                    onClick: () => (i.has_children ? setRegion(i.id) : goPriorities(`?region=${i.id}`)),
-                  }))}
-                />
-              )}
-            </ChartPanel>
-          </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="space-y-6">
             <ChartPanel
               title={<>Public money by status{a.money.some((m) => m.synthetic) && <DemoTag />}</>}
               subtitle="Committed amounts in recorded projects"
@@ -181,12 +167,24 @@ export default function AnalyticsPage() {
               />
             </ChartPanel>
 
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
             <ChartPanel
               title="Languages received"
               subtitle="Reports are understood in the language they arrive in"
               table={<DataTable head={['Language', 'Reports']} rows={(overview.data?.languages ?? []).map((l) => [languageName(l.code), formatNumber(l.count)])} />}
             >
               <BarList labelWidth="5.5rem" rows={(overview.data?.languages ?? []).map((l) => ({ key: l.code, label: languageName(l.code), value: l.count }))} />
+            </ChartPanel>
+
+            <ChartPanel
+              title="Channels"
+              subtitle="How residents reached Sangam"
+              table={<DataTable head={['Channel', 'Reports']} rows={(overview.data?.channels ?? []).map((c) => [CHANNEL_NAMES[c.channel] ?? c.channel, formatNumber(c.count)])} />}
+            >
+              <BarList labelWidth="5.5rem" rows={(overview.data?.channels ?? []).map((c) => ({ key: c.channel, label: CHANNEL_NAMES[c.channel] ?? c.channel, value: c.count }))} />
             </ChartPanel>
           </div>
         </div>
