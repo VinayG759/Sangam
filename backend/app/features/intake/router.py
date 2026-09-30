@@ -149,6 +149,10 @@ class TrackStatus(BaseModel):
     region_name: str | None
     verdict: str | None = None
     rank: int | None = None
+    # The resident's own words, already redacted at intake. Only the holder of the tracking ID sees them.
+    language: str | None = None
+    text_original: str | None = None
+    text_en: str | None = None
 
 
 @web_router.get("/track/{tracking_id}", response_model=TrackStatus)
@@ -161,7 +165,8 @@ def track(request: Request, tracking_id: str, db: Session = Depends(get_db), pac
     stage = {"received": "received", "understood": "understood", "needs_location": "understood",
              "needs_confirmation": "understood", "located": "located", "unlocated": "unlocated"}[report.status]
     status = TrackStatus(tracking_id=report.tracking_id, received_at=report.created_at.isoformat(), stage=stage,
-                         sector=report.sector, region_name=region.name if region else None)
+                         sector=report.sector, region_name=region.name if region else None,
+                         language=report.language, text_original=report.text_original, text_en=report.text_en)
     run = latest_complete_run(db, pack.country_code)
     if run and report.region_id:
         priority = db.scalar(select(Priority).where(

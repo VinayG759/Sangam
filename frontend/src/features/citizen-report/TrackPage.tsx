@@ -9,7 +9,7 @@ import { VERDICTS } from '@/lib/verdicts'
 import { cx } from '@/lib/cx'
 import { Button, inputStyle } from '@/ui/primitives'
 import { ErrorState, Skeleton } from '@/ui/states'
-import { useLanguage } from './i18n'
+import { LANGUAGES, useLanguage } from './i18n'
 import { Shell } from './ReportPage'
 
 interface Track {
@@ -20,6 +20,9 @@ interface Track {
   region_name: string | null
   verdict: Verdict | null
   rank: number | null
+  language: string | null
+  text_original: string | null
+  text_en: string | null
 }
 
 const STEPS = ['received', 'understood', 'located', 'prioritised'] as const
@@ -28,6 +31,7 @@ export default function TrackPage() {
   const { trackingId } = useParams()
   const navigate = useNavigate()
   const [input, setInput] = useState(trackingId ?? '')
+  const [showText, setShowText] = useState(false)
   const pack = usePack()
   const [lang, setLang, t] = useLanguage()
   const steps = [
@@ -95,6 +99,32 @@ export default function TrackPage() {
                   </li>
                 ))}
               </ol>
+            )}
+            {(query.data.text_original || query.data.text_en) && (
+              <div className="mt-5 border-t border-line pt-4">
+                <Button onClick={() => setShowText((v) => !v)} aria-expanded={showText}>
+                  {showText ? t.hideReport : t.showReport}
+                </Button>
+                {showText && (
+                  <dl className="mt-4 space-y-3">
+                    {query.data.text_original && (
+                      <div>
+                        <dt className="text-[12px] text-faint">
+                          {t.youSaid}
+                          {query.data.language && ` · ${LANGUAGES.find((l) => l.code === query.data.language)?.name ?? query.data.language}`}
+                        </dt>
+                        <dd className="mt-0.5 whitespace-pre-line" dir="auto">{query.data.text_original}</dd>
+                      </div>
+                    )}
+                    {query.data.text_en && query.data.language !== 'en' && (
+                      <div>
+                        <dt className="text-[12px] text-faint">{t.inEnglish}</dt>
+                        <dd className="mt-0.5 whitespace-pre-line text-muted" dir="ltr">{query.data.text_en}</dd>
+                      </div>
+                    )}
+                  </dl>
+                )}
+              </div>
             )}
           </div>
         )}

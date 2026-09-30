@@ -92,6 +92,16 @@ def test_web_report_with_place_picker(client, ai, loaded):
     assert track["stage"] == "located" and track["region_name"] == "Southmere"
 
 
+def test_tracking_page_shows_the_residents_own_redacted_words(client, loaded):
+    receipt = client.post("/api/v1/reports", data={"client_id": "browser-123456", "region_id": "TL-A-SOUTH",
+                                                   "text": "No water. Call 98450 12345"}).json()
+    track = client.get(f"/api/v1/track/{receipt['tracking_id']}").json()
+    assert track["text_original"].startswith("No water") and track["text_en"].startswith("No water")
+    assert track["language"] == "en"
+    body = str(track)
+    assert "12345" not in body and "browser-123456" not in body and "reporter" not in body
+
+
 def test_web_report_needs_a_description_and_a_place(client, loaded):
     no_text = client.post("/api/v1/reports", data={"client_id": "browser-123456", "region_id": "TL-A-SOUTH"})
     no_place = client.post("/api/v1/reports", data={"client_id": "browser-123456", "text": "No water"})

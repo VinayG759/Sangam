@@ -33,7 +33,8 @@ explains what it keeps, for how long, and who can see it.
 - **Reports that could not be placed on the map are shown only as counts by reason**, never
   as text: with no place, they can never meet the threshold above.
 - **The resident** can look up their own report's progress with the tracking ID they were
-  given. The tracking page shows the stage and verdict, not other people's reports.
+  given. The tracking page shows the stage and verdict, and, on request, the resident's own
+  message (already redacted) with its English translation. It never shows other people's reports.
 
 ## Third parties
 

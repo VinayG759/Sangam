@@ -73,6 +73,10 @@ const en = {
   unlocated: 'We could not work out the place for this report. It is saved and counted, but cannot be shown on the map.',
   rank: 'rank',
   reportNew: 'Report a new problem',
+  showReport: 'Show my report',
+  hideReport: 'Hide my report',
+  youSaid: 'What you said',
+  inEnglish: 'In English',
 }
 
 export type Strings = typeof en
@@ -131,6 +135,10 @@ const kn: Strings = {
   unlocated: 'ಈ ವರದಿಯ ಸ್ಥಳವನ್ನು ಗುರುತಿಸಲಾಗಲಿಲ್ಲ. ಇದನ್ನು ಉಳಿಸಿ ಎಣಿಸಲಾಗಿದೆ, ಆದರೆ ನಕ್ಷೆಯಲ್ಲಿ ತೋರಿಸಲಾಗುವುದಿಲ್ಲ.',
   rank: 'ಸ್ಥಾನ',
   reportNew: 'ಹೊಸ ಸಮಸ್ಯೆ ತಿಳಿಸಿ',
+  showReport: 'ನನ್ನ ವರದಿ ನೋಡಿ',
+  hideReport: 'ವರದಿ ಮರೆಮಾಡಿ',
+  youSaid: 'ನೀವು ಹೇಳಿದ್ದು',
+  inEnglish: 'ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ',
 }
 
 const hi: Strings = {
@@ -187,6 +195,10 @@ const hi: Strings = {
   unlocated: 'हम इस रिपोर्ट का स्थान नहीं पहचान सके। यह सहेजी और गिनी गई है, पर नक्शे पर नहीं दिखाई जा सकती।',
   rank: 'क्रम',
   reportNew: 'नई समस्या बताएँ',
+  showReport: 'मेरी रिपोर्ट देखें',
+  hideReport: 'रिपोर्ट छिपाएँ',
+  youSaid: 'आपने क्या कहा',
+  inEnglish: 'अंग्रेज़ी में',
 }
 
 const te: Strings = {
@@ -243,6 +255,10 @@ const te: Strings = {
   unlocated: 'ఈ నివేదిక స్థలాన్ని గుర్తించలేకపోయాం. ఇది భద్రపరచబడి లెక్కించబడింది, కానీ మ్యాప్‌లో చూపించలేము.',
   rank: 'స్థానం',
   reportNew: 'కొత్త సమస్య తెలియజేయండి',
+  showReport: 'నా నివేదిక చూడండి',
+  hideReport: 'నివేదికను దాచండి',
+  youSaid: 'మీరు చెప్పింది',
+  inEnglish: 'ఇంగ్లీష్‌లో',
 }
 
 const ta: Strings = {
@@ -299,6 +315,10 @@ const ta: Strings = {
   unlocated: 'இந்தப் புகாரின் இடத்தைக் கண்டறிய முடியவில்லை. இது சேமிக்கப்பட்டு எண்ணப்பட்டது, ஆனால் வரைபடத்தில் காட்ட முடியாது.',
   rank: 'தரம்',
   reportNew: 'புதிய பிரச்சினையைத் தெரிவியுங்கள்',
+  showReport: 'என் புகாரைக் காட்டு',
+  hideReport: 'புகாரை மறை',
+  youSaid: 'நீங்கள் சொன்னது',
+  inEnglish: 'ஆங்கிலத்தில்',
 }
 
 const mr: Strings = {
@@ -355,6 +375,10 @@ const mr: Strings = {
   unlocated: 'या तक्रारीचे ठिकाण ओळखता आले नाही. ती जतन करून मोजली आहे, पण नकाशावर दाखवता येत नाही.',
   rank: 'क्रमांक',
   reportNew: 'नवीन समस्या कळवा',
+  showReport: 'माझी तक्रार पहा',
+  hideReport: 'तक्रार लपवा',
+  youSaid: 'तुम्ही काय सांगितले',
+  inEnglish: 'इंग्रजीत',
 }
 
 const bn: Strings = {
@@ -411,6 +435,10 @@ const bn: Strings = {
   unlocated: 'এই অভিযোগের স্থান শনাক্ত করা যায়নি। এটি সংরক্ষিত ও গণনা করা হয়েছে, কিন্তু মানচিত্রে দেখানো যাবে না।',
   rank: 'ক্রম',
   reportNew: 'নতুন সমস্যা জানান',
+  showReport: 'আমার অভিযোগ দেখুন',
+  hideReport: 'অভিযোগ লুকান',
+  youSaid: 'আপনি যা বলেছেন',
+  inEnglish: 'ইংরেজিতে',
 }
 
 const ur: Strings = {
@@ -467,6 +495,10 @@ const ur: Strings = {
   unlocated: 'ہم اس رپورٹ کا مقام نہیں پہچان سکے۔ یہ محفوظ اور شمار کی گئی ہے، لیکن نقشے پر نہیں دکھائی جا سکتی۔',
   rank: 'درجہ',
   reportNew: 'نیا مسئلہ بتائیں',
+  showReport: 'میری رپورٹ دیکھیں',
+  hideReport: 'رپورٹ چھپائیں',
+  youSaid: 'آپ نے کیا کہا',
+  inEnglish: 'انگریزی میں',
 }
 
 export const STRINGS: Record<Lang, Strings> = { en, kn, hi, te, ta, mr, bn, ur }
