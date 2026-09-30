@@ -131,7 +131,7 @@ export default function ImpactPage() {
               </div>
               <div className="max-h-[560px] overflow-auto">
                 <table className="w-full min-w-[720px] text-left">
-                  <thead className="sticky top-0 bg-surface text-[12px] text-faint">
+                  <thead className="sticky top-0 z-10 bg-surface text-[12px] text-faint shadow-[0_1px_0_var(--line)] [&_th]:bg-surface">
                     <tr className="border-b border-line">
                       <th className="px-4 py-2 font-normal">Place</th>
                       <th className="px-2 py-2 text-right font-normal">{programme.rows[0]?.baseline_period}</th>

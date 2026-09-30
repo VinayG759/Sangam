@@ -146,7 +146,11 @@ body {
   background: var(--subtle);
 }
 
-/* A quiet, grey basemap so only the verdict colours carry meaning. */
-.leaflet-tile-pane {
+/*
+ * A quiet, grey basemap so only the verdict colours carry meaning. The filter sits on each
+ * tile, not the whole pane: on the pane, Chrome keeps stale snapshots during zoom animations,
+ * which showed as grey strips down the side of the map.
+ */
+.leaflet-tile {
   filter: grayscale(1) contrast(0.9) opacity(0.55);
 }
