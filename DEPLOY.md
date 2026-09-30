@@ -27,6 +27,7 @@ Environment variables (see `backend/.env.example` for what each one does):
 | `ADMIN_TOKEN` | a long random value (`python -c "import secrets; print(secrets.token_urlsafe(32))"`) |
 | `REPORTER_HASH_PEPPER` | a long random value — set once, never change |
 | `GEMINI_API_KEY` | AI Studio key |
+| `SARVAM_API_KEY` | Sarvam key for voice-note transcription (optional; without it Gemini transcribes, less reliably for Indian languages) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | bot token; a secret you choose |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET` | from the Meta app |
 | `CONTACT_ENCRYPTION_KEY` | encrypts citizens' chat IDs for status updates (leave empty to store none) |

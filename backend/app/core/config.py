@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
 
+    # Sarvam speech-to-text for voice notes (Indian languages). Empty = Gemini listens to the audio instead.
+    SARVAM_API_KEY: str = ""
+    SARVAM_STT_MODEL: str = "saaras:v3"
+
     TELEGRAM_BOT_TOKEN: str = ""
     # Telegram sends this in X-Telegram-Bot-Api-Secret-Token. Empty = reject every update.
     TELEGRAM_WEBHOOK_SECRET: str = ""

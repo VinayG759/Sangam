@@ -35,6 +35,7 @@ os.environ.update({
     "REPORTER_HASH_PEPPER": "test-pepper",
     "ALLOWED_ORIGINS": "http://localhost:5173",
     "GEMINI_API_KEY": "",
+    "SARVAM_API_KEY": "",  # never call the real speech service from tests
     # Fixed test-only key so encrypted contacts can be exercised.
     "CONTACT_ENCRYPTION_KEY": "q9bYk0Qm2p8m9cRcS6o5Qx1k3Yv6wL0tJm4uZ7aB2cE=",
     "PUBLIC_APP_URL": "https://sangam.example",

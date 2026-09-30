@@ -52,8 +52,8 @@ tested and committed locally; **nothing is deployed yet**. What it delivered, ma
 | Analytics page (29 Sep) | **Done** — `/analytics` + `GET /api/v1/analytics`: KPI tiles, reports per week, verdict mix, verdicts by need, official progress (dumbbell), places needing action, money by status, completed-project outcomes, languages; region-scoped; table view for every chart. Verdict chart colours validated for colour-blind separation in light and dark |
 | UI fixes (29 Sep) | Segmented switch no longer shifts labels; Priorities table has fixed columns and a phone card layout; no page scrolls sideways at 375–1440 px (measured) |
 | Resident pages (29 Sep) | Report and Track pages in all 8 pack languages (Urdu right-to-left), photo preview with change/remove, voice preview with remove and a timer, "discard or continue" guard. Translations need a native-speaker review |
-| Voice in other languages (29 Sep) | Tested with browser-recorded WebM clips in Hindi, Kannada and Tamil through the real intake: correct need every time. Prompt fixed so transcripts stay in the speaker's own script (Kannada had come back romanised, Tamil as Cyrillic). The lite model is still inconsistent on audio — Sarvam speech-to-text proposed (D-28) |
-| Tests | 116 backend (real Postgres) + 10 frontend, all passing; `pip-audit` and `npm audit` report no known vulnerabilities; the Docker image last built and passed the smoke test before Phase 5 |
+| Voice in other languages (29 Sep) | Tested with browser-recorded WebM clips in Hindi, Kannada and Tamil through the real intake: correct need every time. Prompt fixed so transcripts stay in the speaker's own script (Kannada had come back romanised, Tamil as Cyrillic). **30 Sep: Sarvam speech-to-text added** (`app/core/speech.py`, model `saaras:v3`): voice notes are transcribed by Sarvam, then understood as text by Gemini; Gemini listens itself if Sarvam is off or fails. Re-tested end to end with browser-recorded WebM: word-perfect transcripts in Devanagari, Kannada and Tamil script, correct need and place in all three, zero fallbacks (D-28) |
+| Tests | 120 backend (real Postgres) + 10 frontend, all passing; `pip-audit` and `npm audit` report no known vulnerabilities; the Docker image last built and passed the smoke test before Phase 5 |
 
 **Two corrections the rewrite forced — both about honesty:**
 
@@ -1052,7 +1052,7 @@ Get one district fully right end-to-end before scaling. Validate with the pack v
 | D-25 | What a brief signature covers | **The whole PDF file**, not a hash of the evidence — otherwise the visible text could be edited without breaking the seal | 28 Sep |
 | D-26 | HTTP client logging | `httpx`/`httpcore` at WARNING: at INFO they log request URLs, and Telegram URLs carry the bot token | 28 Sep |
 | D-27 | Demonstration data | **Vinay, 29 Sep: the prototype uses fake data wherever real data is missing, so every feature can be shown working; the evaluation, arithmetic and verdicts must be real.** Supersedes D-20 for the demo. Condition kept: every synthetic row is marked `is_synthetic` and labelled DEMO on screen and in briefs; country packs never contain made-up rows | 29 Sep |
-| D-28 | Voice transcription | Gemini-lite classifies and translates correctly but its native-script transcripts are inconsistent on audio. Proposed: Sarvam speech-to-text for audio, Gemini for classification, Gemini as fallback — pending Vinay's Sarvam key | 29 Sep |
+| D-28 | Voice transcription | **Sarvam speech-to-text for audio, Gemini for understanding, Gemini listening as the fallback.** Gemini-lite classified correctly but its native-script transcripts were inconsistent; Sarvam was word-perfect and repeatable on the same clips. Sarvam is listed as a data processor in `docs/privacy.md` | 29–30 Sep |
 | D-22 | Production database for v2 | **Pending — Vinay's decision:** new empty Supabase project (recommended) or reset the existing one | — |
 
 ---

@@ -25,6 +25,7 @@ from app.core.ai import AIClient, AIUnavailable, Understanding
 from app.core.crypto import contacts_enabled, encrypt
 from app.core.pack import Pack
 from app.core.security import reporter_hash
+from app.core.speech import transcribe
 from app.core.text import redact
 from app.features.intake.location import Gazetteer, Match
 from app.models import Contact, Conversation, Region, Report, ReportMedia
@@ -105,7 +106,7 @@ def handle_message(db: Session, ai: AIClient, pack: Pack, msg: Inbound) -> Outco
                     has_media=msg.media is not None, lat=msg.lat, lon=msg.lon)
 
     try:
-        understanding = ai.understand(pack, msg.text, msg.media, msg.mime_type)
+        understanding = understand(ai, pack, msg.text, msg.media, msg.mime_type)
     except AIUnavailable:
         db.add(report)
         db.flush()
@@ -155,6 +156,25 @@ def _remember_contact(db: Session, pack: Pack, report: Report, msg: Inbound) -> 
         return
     db.add(Contact(report_id=report.id, channel=msg.channel, address_encrypted=encrypt(msg.reply_to),
                    expires_at=_now() + timedelta(days=pack.privacy.contact_retention_days)))
+
+
+def understand(ai: AIClient, pack: Pack, text: str | None, media: bytes | None, mime_type: str | None) -> Understanding:
+    """
+    Voice notes are transcribed by the speech service first (exact words, speaker's own script),
+    then understood as text. If there is no speech service, or it fails, Gemini listens to the
+    audio itself. Photos and text go straight to Gemini.
+    """
+    if media and mime_type and mime_type.startswith("audio/"):
+        heard = transcribe(media, mime_type)
+        if heard:
+            said = f"[Voice note, transcribed word for word]\n{heard.text}"
+            if text:
+                said += f"\n[Also typed]\n{text}"
+            understanding = ai.understand(pack, said, None, None)
+            if heard.language:
+                understanding.language = heard.language  # the speech service heard it; trust its detection
+            return understanding
+    return ai.understand(pack, text, media, mime_type)
 
 
 def _apply_understanding(report: Report, u: Understanding) -> None:
@@ -301,7 +321,7 @@ def reprocess_pending(db: Session, ai: AIClient, pack: Pack, limit: int = 20) ->
         try:
             if report.status == "received":
                 media = db.get(ReportMedia, report.id)
-                u = ai.understand(pack, report.text_original, media.data if media else None,
+                u = understand(ai, pack, report.text_original, media.data if media else None,
                                   media.mime_type if media else None)
                 _apply_understanding(report, u)
                 if report.region_id:

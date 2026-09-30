@@ -146,3 +146,55 @@ def test_reprocessed_report_with_an_unknown_place_records_why(db, ai, loaded):
     reprocess_pending(db, ai, loaded)
     report = only_report(db)
     assert report.status == "unlocated" and report.location_failure == "place_not_recognised"
+
+
+# ── Voice notes: speech service first, Gemini as fallback ───────────────────
+
+
+def _record_calls(ai):
+    calls = []
+    original = ai.understand
+
+    def spy(pack, text, media, mime_type):
+        calls.append({"text": text, "media": media, "mime_type": mime_type})
+        return original(pack, text, media, mime_type)
+
+    ai.understand = spy
+    return calls
+
+
+def test_voice_note_is_transcribed_then_understood_as_text(db, ai, loaded, monkeypatch):
+    from app.core.speech import Heard
+
+    heard = []
+    monkeypatch.setattr("app.features.intake.service.transcribe",
+                        lambda audio, mime: heard.append(mime) or Heard("ಹೊನ್ನಾವರದಲ್ಲಿ ರಸ್ತೆ ಹಾಳಾಗಿದೆ", "kn"))
+    calls = _record_calls(ai)
+    ai.places = ["Riverton"]
+    send(db, ai, loaded, None, media=b"voice", mime_type="audio/ogg")
+    assert heard == ["audio/ogg"]
+    assert calls[0]["media"] is None and "ಹೊನ್ನಾವರದಲ್ಲಿ ರಸ್ತೆ ಹಾಳಾಗಿದೆ" in calls[0]["text"]
+    assert only_report(db).language == "kn"  # the speech service's detection wins
+
+
+def test_voice_note_falls_back_to_gemini_listening_when_speech_fails(db, ai, loaded, monkeypatch):
+    monkeypatch.setattr("app.features.intake.service.transcribe", lambda audio, mime: None)
+    calls = _record_calls(ai)
+    ai.places = ["Riverton"]
+    send(db, ai, loaded, None, media=b"voice", mime_type="audio/webm")
+    assert calls[0]["media"] == b"voice" and calls[0]["mime_type"] == "audio/webm"
+    assert only_report(db).status == "located"
+
+
+def test_photos_never_go_to_the_speech_service(db, ai, loaded, monkeypatch):
+    monkeypatch.setattr("app.features.intake.service.transcribe",
+                        lambda audio, mime: (_ for _ in ()).throw(AssertionError("photo sent to speech")))
+    ai.places = ["Riverton"]
+    send(db, ai, loaded, "broken road", media=b"jpeg", mime_type="image/jpeg")
+    assert only_report(db).status == "located"
+
+
+def test_speech_service_is_off_without_a_key():
+    from app.core.speech import speech_enabled, transcribe
+
+    assert speech_enabled() is False and transcribe(b"voice", "audio/ogg") is None

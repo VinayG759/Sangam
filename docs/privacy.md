@@ -41,6 +41,10 @@ explains what it keeps, for how long, and who can see it.
   translate, classify and redact it, and writes plain-language summaries of aggregated
   evidence. Only the report content is sent, never the resident's phone number or chat ID.
   Deployments should check the data-use terms of the Gemini tier they use.
+- **Sarvam AI** (optional, when `SARVAM_API_KEY` is set) receives the audio of voice notes and
+  returns a transcript in the speaker's language. Only the audio is sent, never the resident's
+  phone number or chat ID. If Sarvam is not configured or fails, Gemini transcribes instead.
+  Deployments should check Sarvam's data-use terms.
 - **Hosting:** the reference deployment uses Render (API), Supabase (PostgreSQL database)
   and Vercel (dashboard). Each deployment chooses its own hosts.
 - **Messaging:** WhatsApp (Meta) and Telegram deliver messages to and from residents under

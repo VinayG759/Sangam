@@ -140,7 +140,11 @@ approve a deploy.
   page of charts; the Fund/Audit switch no longer jiggles; every page fits phones and tablets;
   the report form speaks all 8 languages (Urdu right-to-left); photo preview with change/remove;
   a "discard or continue?" warning; voice notes tested in Hindi, Kannada and Tamil.
-- 126 automatic tests (116 backend, 10 dashboard), all passing. The Docker version was tested
+- **30 Sep: voice notes now go through Sarvam** (your key), which is built for Indian
+  languages. In the same test, Gemini had written Kannada in English letters and Tamil in
+  Russian letters; Sarvam got every word right, in the right script, every time. If Sarvam is
+  ever down, Gemini takes over automatically.
+- 130 automatic tests (120 backend, 10 dashboard), all passing. The Docker version was tested
   end to end before Phase 5.
 
 **Two honest corrections the rewrite forced:**
