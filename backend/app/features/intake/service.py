@@ -90,7 +90,7 @@ def handle_message(db: Session, ai: AIClient, pack: Pack, msg: Inbound) -> Outco
         db.commit()
         pending = None
     if pending:
-        return _answer_follow_up(db, pack, pending, msg)
+        return _answer_follow_up(db, ai, pack, pending, msg)
 
     if not (msg.text or msg.media):
         return Outcome("Please describe the problem — send a voice note, a photo, or a short message.")
@@ -247,9 +247,22 @@ def _decide_on_place(db: Session, pack: Pack, report: Report, match: Match | Non
                    report.tracking_id, report.status, report.sector)
 
 
-def _answer_follow_up(db: Session, pack: Pack, pending: Conversation, msg: Inbound) -> Outcome:
+def _answer_follow_up(db: Session, ai: AIClient, pack: Pack, pending: Conversation, msg: Inbound) -> Outcome:
     report = db.get(Report, pending.report_id)
     gazetteer = Gazetteer.for_pack(db, pack)
+    answer = (msg.text or "").strip()
+    candidates = [answer] if answer else []
+
+    # A spoken answer goes through the same speech → understanding step as the first message,
+    # which also romanises the place name so it can be matched.
+    if msg.media and msg.mime_type and msg.mime_type.startswith("audio/"):
+        try:
+            heard = understand(ai, pack, msg.text, msg.media, msg.mime_type)
+        except AIUnavailable:
+            return Outcome("Sorry, we could not listen to that just now. Please type the place name, "
+                           "or share your location.", report.tracking_id, report.status, report.sector)
+        answer = answer or (heard.transcript or "").strip()
+        candidates = heard.place_names + candidates + ([heard.transcript] if heard.transcript else [])
 
     if msg.lat is not None and msg.lon is not None:
         match = gazetteer.nearest(msg.lat, msg.lon)
@@ -260,7 +273,6 @@ def _answer_follow_up(db: Session, pack: Pack, pending: Conversation, msg: Inbou
             db.commit()
             return _received(db, pack, report)
 
-    answer = (msg.text or "").strip()
     if pending.awaiting == "confirm" and answer.casefold().strip(".! ") in YES_WORDS:
         region = db.get(Region, pending.candidate_region_id)
         _locate(report, Match(region.id, region.name, 100.0), "text")  # confirmed by the citizen
@@ -276,7 +288,7 @@ def _answer_follow_up(db: Session, pack: Pack, pending: Conversation, msg: Inbou
         db.commit()
         return Outcome(f"Thank you. We could not find that place, but your report {report.tracking_id} "
                        "is saved and counted.", report.tracking_id, report.status, report.sector)
-    match = gazetteer.resolve([answer]) if answer else None
+    match = gazetteer.resolve(candidates) if candidates else None
     db.commit()
     return _decide_on_place(db, pack, report, match, first_time=False)
 

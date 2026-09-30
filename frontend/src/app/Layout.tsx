@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router'
 import {
   Activity, Calculator, ChartColumn, LayoutGrid, ListOrdered, Map as MapIcon, Menu, MessageSquareText, Send,
-  ShieldCheck, X,
+  SearchCheck, ShieldCheck, X,
 } from 'lucide-react'
 import { usePack } from '@/lib/pack'
 import { useOverview } from '@/features/overview/api'
@@ -55,6 +55,10 @@ function NavContent() {
         <a href="/report" className="flex items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-muted hover:text-ink">
           <Send className="size-3.5" strokeWidth={1.75} />
           Citizen report form
+        </a>
+        <a href="/track" className="flex items-center gap-2 rounded-md border border-line px-2.5 py-2 text-[12px] text-muted hover:text-ink">
+          <SearchCheck className="size-3.5" strokeWidth={1.75} />
+          Track a report
         </a>
         <p className="px-1 text-[11px] leading-relaxed text-faint">
           Open-source Digital Public Good. Rankings are arithmetic; AI only writes explanations.

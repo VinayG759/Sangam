@@ -58,6 +58,26 @@ def test_missing_place_asks_once_and_accepts_a_typed_answer(db, ai, loaded):
     assert report.status == "located" and report.region_id == "TL-A-SOUTH"
 
 
+def test_spoken_answer_to_the_place_question_is_understood(db, ai, loaded):
+    send(db, ai, loaded, media=b"voice", mime_type="audio/ogg")
+    ai.places = ["Southmere"]  # the answer is a voice note naming the place
+    outcome = send(db, ai, loaded, media=b"voice", mime_type="audio/ogg")
+    report = only_report(db)
+    assert report.status == "located" and report.region_id == "TL-A-SOUTH"
+    assert "Southmere" in outcome.reply
+
+
+def test_spoken_answer_during_gemini_outage_asks_to_type_and_keeps_waiting(db, ai, loaded):
+    send(db, ai, loaded, "No water since Monday")
+    ai.down = True
+    outcome = send(db, ai, loaded, media=b"voice", mime_type="audio/ogg")
+    assert "type the place name" in outcome.reply
+    assert only_report(db).status == "needs_location"
+    ai.down = False
+    send(db, ai, loaded, "Southmere")  # the outage did not use up an attempt
+    assert only_report(db).region_id == "TL-A-SOUTH"
+
+
 def test_shared_gps_location_answers_the_question(db, ai, loaded):
     send(db, ai, loaded, "No water since Monday")
     send(db, ai, loaded, lat=12.04, lon=77.04)
